@@ -1,0 +1,23 @@
+{
+ "content": null,
+ "creation": "2026-04-10 11:26:25.693866",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-04-11 10:35:15.766541",
+ "modified_by": "Administrator",
+ "module": "Contactlink",
+ "name": "contact-link-analysi-1",
+ "owner": "Administrator",
+ "page_name": "contact-link-analysi-1",
+ "roles": [
+  {
+   "role": "main_admin"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 1,
+ "title": "Contact link Analysis Page"
+}

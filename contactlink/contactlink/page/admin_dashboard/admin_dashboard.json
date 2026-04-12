@@ -1,0 +1,23 @@
+{
+ "content": null,
+ "creation": "2026-04-11 10:18:11.008917",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-04-11 10:34:45.620423",
+ "modified_by": "Administrator",
+ "module": "Contactlink",
+ "name": "admin-dashboard",
+ "owner": "Administrator",
+ "page_name": "admin-dashboard",
+ "roles": [
+  {
+   "role": "main_admin"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 1,
+ "title": "Admin Dashboard"
+}
