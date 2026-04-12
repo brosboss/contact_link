@@ -18,6 +18,18 @@ frappe.pages["admin-dashboard"].on_page_load = function (wrapper) {
 			blurb: __("Register owners, photos, and contacts for each device."),
 			icon: "fa fa-tablet",
 		},
+		{
+			route: "contact-statistics",
+			title: __("Contact Statistics"),
+			blurb: __("View aggregated contact metrics and breakdowns."),
+			icon: "fa fa-bar-chart",
+		},
+		{
+			route: "phone-number-statist",
+			title: __("Phone Number Statistics"),
+			blurb: __("Analyze phone number usage and counts."),
+			icon: "fa fa-phone",
+		},
 	];
 
 	const nav_blocks = tools

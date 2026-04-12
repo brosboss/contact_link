@@ -12,10 +12,10 @@
  "page_name": "update-repository",
  "roles": [
   {
-   "role": "All"
+   "role": "main_admin"
   },
   {
-   "role": "main_admin"
+   "role": "System Manager"
   }
  ],
  "script": null,
