@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-04-12 08:32:58.025021",
+ "modified": "2026-04-12 09:50:16.631077",
  "modified_by": "Administrator",
  "module": "Contactlink",
  "name": "update-repository",
@@ -13,6 +13,9 @@
  "roles": [
   {
    "role": "All"
+  },
+  {
+   "role": "main_admin"
   }
  ],
  "script": null,

@@ -10,6 +10,7 @@ frappe.pages["contact-statistics"].on_page_load = function (wrapper) {
 
 	page.add_inner_button(__("Admin home"), () => frappe.set_route("admin-dashboard"));
 	page.add_inner_button(__("Contact link analysis"), () => frappe.set_route("contact-link-analysi-1"));
+	page.add_inner_button(__("Phone number statistics"), () => frappe.set_route("phone-number-statist"));
 
 	const root_id = "cs-root-" + frappe.utils.get_random(8);
 	const $main = $(page.main);
@@ -18,10 +19,8 @@ frappe.pages["contact-statistics"].on_page_load = function (wrapper) {
 		<div id="${root_id}" class="contact-statistics-page" style="padding:4px 2px 32px;max-width:1280px;">
 			<p class="text-muted" style="margin:0 0 12px 0;max-width:960px;line-height:1.5;">
 				${__(
-					"Pick a device to see overlap with the rest of the system in two ways: " +
-						"<strong>shared phone numbers</strong> (after normalizing digits) and " +
-						"<strong>shared contact names</strong> (same saved name on another device, case-insensitive). " +
-						"Each table lists only mutual cases — something must appear on at least two devices."
+					"Pick a device to see mutual connections" +
+						"..."
 				)}
 			</p>
 			<div class="form-inline" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;margin-bottom:16px;">

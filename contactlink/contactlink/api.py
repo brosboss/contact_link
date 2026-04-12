@@ -234,7 +234,8 @@ def _device_contact_rows() -> tuple[list[dict], dict[str, list[dict]]]:
 			IFNULL(NULLIF(TRIM(d.odner_name), ''), d.name) AS owner_label,
 			d.owner_image,
 			dc.phone_number,
-			IFNULL(NULLIF(TRIM(dc.contact_name), ''), '') AS contact_name
+			IFNULL(NULLIF(TRIM(dc.contact_name), ''), '') AS contact_name,
+			dc.idx AS contact_idx
 		FROM `tabDevice Id` d
 		INNER JOIN `tabDevice Contact` dc ON dc.parent = d.name AND dc.parenttype = 'Device Id'
 		ORDER BY d.name, dc.idx
@@ -251,7 +252,8 @@ def _device_contact_rows() -> tuple[list[dict], dict[str, list[dict]]]:
 			"owner_label": r.owner_label,
 			"owner_image": r.owner_image or "",
 			"contact_name": r.contact_name or "",
-			"phone_display": r.phone_number or norm,
+			"phone_display": (r.phone_number or norm or "").strip() or norm,
+			"contact_idx": int(r.contact_idx or 0),
 		}
 		phone_map.setdefault(norm, []).append(entry)
 	return rows, phone_map
@@ -458,6 +460,142 @@ def get_device_shared_number_statistics(device_name: str | None = None):
 	return {
 		"summary": out["summary"],
 		"mutual_rows": out["mutual_number_rows"],
+	}
+
+
+@frappe.whitelist()
+def search_phone_numbers(txt: str | None = None, limit: int = 25):
+	"""Typeahead for Phone Number Statistics: match normalized digits or display substring."""
+	frappe.has_permission("Device Id", "read", throw=True)
+	txt = (txt or "").strip()
+	if len(txt) < 2:
+		return []
+	lim = max(1, min(int(limit or 25), 100))
+	_rows, phone_map = _device_contact_rows()
+	t = txt.lower()
+	t_digits = "".join(c for c in txt if c.isdigit())
+	out: list[dict] = []
+	for norm, entries in phone_map.items():
+		primary = entries[0]
+		display = (primary.get("phone_display") or norm or "").strip() or norm
+		match = False
+		if t_digits and t_digits in norm:
+			match = True
+		elif t in norm.lower() or t in display.lower():
+			match = True
+		if not match:
+			continue
+		devices = {e["device_name"] for e in entries}
+		out.append(
+			{
+				"value": norm,
+				"label": _("{0} · {1} device(s) · {2} row(s)").format(display, len(devices), len(entries)),
+				"phone_norm": norm,
+				"phone_display": display,
+				"device_count": len(devices),
+				"row_count": len(entries),
+			}
+		)
+	out.sort(key=lambda x: (-x["device_count"], -x["row_count"], str(x["phone_norm"])))
+	return out[:lim]
+
+
+@frappe.whitelist()
+def get_phone_number_statistics(phone: str | None = None):
+	"""Tabulated statistics for one normalized phone: every Device Contact row with that number."""
+	frappe.has_permission("Device Id", "read", throw=True)
+	raw = (phone or "").strip()
+	norm = _normalize_phone(raw)
+	if not norm:
+		frappe.throw(_("Enter a phone number that contains digits"))
+
+	_rows, phone_map = _device_contact_rows()
+	entries = list(phone_map.get(norm, []))
+	primary_display = (entries[0].get("phone_display") or norm) if entries else raw or norm
+
+	devices = {e["device_name"] for e in entries}
+	name_keys = set()
+	for e in entries:
+		k = _normalize_contact_name(e.get("contact_name"))
+		if k:
+			name_keys.add(k)
+
+	device_id_contact_by_device: dict[str, str] = {}
+	if devices:
+		for d in frappe.get_all(
+			"Device Id",
+			filters={"name": ["in", list(devices)]},
+			fields=["name", "device_id_contact"],
+		):
+			device_id_contact_by_device[d["name"]] = (d.get("device_id_contact") or "").strip()
+
+	rows_out: list[dict] = []
+	for e in entries:
+		dn = e["device_name"]
+		rows_out.append(
+			{
+				"device_name": dn,
+				"owner_label": e.get("owner_label") or dn,
+				"device_id_contact": device_id_contact_by_device.get(dn, ""),
+				"contact_name": (e.get("contact_name") or "").strip(),
+				"phone_display": e.get("phone_display") or norm,
+				"contact_idx": e.get("contact_idx", 0),
+			}
+		)
+	rows_out.sort(
+		key=lambda x: (str(x["device_name"]), int(x.get("contact_idx") or 0), str(x.get("contact_name") or ""))
+	)
+
+	global_stats = {
+		"device_rows": len(frappe.get_all("Device Id", pluck="name")),
+		"unique_phones_in_system": len(phone_map),
+	}
+
+	summary = {
+		"phone_norm": norm,
+		"phone_display": primary_display,
+		"total_rows": len(entries),
+		"distinct_devices": len(devices),
+		"distinct_saved_names": len(name_keys),
+		"found": bool(entries),
+		**global_stats,
+	}
+
+	return {
+		"summary": summary,
+		"rows": rows_out,
+	}
+
+
+@frappe.whitelist()
+def get_device_id_popup_details(name: str | None = None):
+	"""Read-only Device Id fields for a desk popup (owner, image URL, child contacts)."""
+	frappe.has_permission("Device Id", "read", throw=True)
+	name = (name or "").strip()
+	if not name:
+		frappe.throw(_("Device Id is required"))
+	if not frappe.db.exists("Device Id", name):
+		frappe.throw(_("Device Id {0} was not found").format(name))
+
+	doc = frappe.get_doc("Device Id", name)
+	doc.check_permission("read")
+
+	img_url = _owner_image_url(doc.get("owner_image"))
+	contacts: list[dict] = []
+	for row in doc.get("device_contact") or []:
+		contacts.append(
+			{
+				"contact_name": (row.get("contact_name") or "").strip(),
+				"phone_number": (row.get("phone_number") or "").strip(),
+			}
+		)
+
+	return {
+		"name": doc.name,
+		"odner_name": (doc.get("odner_name") or "").strip(),
+		"device_id_contact": (doc.get("device_id_contact") or "").strip(),
+		"owner_image_url": img_url,
+		"contacts": contacts,
 	}
 
 
