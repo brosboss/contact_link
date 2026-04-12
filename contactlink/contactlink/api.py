@@ -12,6 +12,14 @@ def _normalize_phone(phone: str | None) -> str:
 	return digits or str(phone).strip()
 
 
+def _normalize_contact_name(name: str | None) -> str:
+	"""Lowercase, collapse whitespace — used to match saved contact names across devices."""
+	if not name:
+		return ""
+	s = " ".join(str(name).split())
+	return s.lower()
+
+
 def _owner_image_url(path: str | None) -> str | None:
 	if not path:
 		return None
@@ -70,35 +78,7 @@ def get_contact_link_graph(mode: str | None = "full"):
 	if mode not in ("full", "owners"):
 		mode = "full"
 
-	rows = frappe.db.sql(
-		"""
-		SELECT
-			d.name AS device_name,
-			IFNULL(NULLIF(TRIM(d.odner_name), ''), d.name) AS owner_label,
-			d.owner_image,
-			dc.phone_number,
-			IFNULL(NULLIF(TRIM(dc.contact_name), ''), '') AS contact_name
-		FROM `tabDevice Id` d
-		INNER JOIN `tabDevice Contact` dc ON dc.parent = d.name AND dc.parenttype = 'Device Id'
-		ORDER BY d.name, dc.idx
-		""",
-		as_dict=True,
-	)
-
-	# normalized_phone -> list of (device_name, owner_label, display_contact)
-	phone_map: dict[str, list[dict]] = {}
-	for r in rows:
-		norm = _normalize_phone(r.phone_number)
-		if not norm:
-			continue
-		entry = {
-			"device_name": r.device_name,
-			"owner_label": r.owner_label,
-			"owner_image": r.owner_image or "",
-			"contact_name": r.contact_name or "",
-			"phone_display": r.phone_number or norm,
-		}
-		phone_map.setdefault(norm, []).append(entry)
+	rows, phone_map = _device_contact_rows()
 
 	stats = {
 		"device_rows": len(frappe.get_all("Device Id", pluck="name")),
@@ -243,6 +223,242 @@ def _graph_owners_only(phone_map: dict[str, list[dict]], stats: dict) -> dict:
 	stats["contact_nodes"] = 0
 	stats["owner_edges"] = len(edges)
 	return {"nodes": list(nodes.values()), "edges": edges, "stats": stats, "mode": "owners"}
+
+
+def _device_contact_rows() -> tuple[list[dict], dict[str, list[dict]]]:
+	"""Return raw SQL rows and normalized_phone → entry list (same shape as get_contact_link_graph)."""
+	rows = frappe.db.sql(
+		"""
+		SELECT
+			d.name AS device_name,
+			IFNULL(NULLIF(TRIM(d.odner_name), ''), d.name) AS owner_label,
+			d.owner_image,
+			dc.phone_number,
+			IFNULL(NULLIF(TRIM(dc.contact_name), ''), '') AS contact_name
+		FROM `tabDevice Id` d
+		INNER JOIN `tabDevice Contact` dc ON dc.parent = d.name AND dc.parenttype = 'Device Id'
+		ORDER BY d.name, dc.idx
+		""",
+		as_dict=True,
+	)
+	phone_map: dict[str, list[dict]] = {}
+	for r in rows:
+		norm = _normalize_phone(r.phone_number)
+		if not norm:
+			continue
+		entry = {
+			"device_name": r.device_name,
+			"owner_label": r.owner_label,
+			"owner_image": r.owner_image or "",
+			"contact_name": r.contact_name or "",
+			"phone_display": r.phone_number or norm,
+		}
+		phone_map.setdefault(norm, []).append(entry)
+	return rows, phone_map
+
+
+def _contact_name_map_from_rows(rows: list[dict]) -> dict[str, list[dict]]:
+	"""normalized contact name -> entries (same device can appear multiple times for different rows)."""
+	cmap: dict[str, list[dict]] = {}
+	for r in rows:
+		cn_key = _normalize_contact_name(r.get("contact_name"))
+		if not cn_key:
+			continue
+		norm_phone = _normalize_phone(r.phone_number)
+		pd = (r.get("phone_number") or "").strip() or norm_phone or ""
+		entry = {
+			"device_name": r.device_name,
+			"owner_label": r.owner_label,
+			"contact_name": (r.contact_name or "").strip(),
+			"phone_display": pd,
+			"phone_norm": norm_phone,
+		}
+		cmap.setdefault(cn_key, []).append(entry)
+	return cmap
+
+
+@frappe.whitelist()
+def get_device_contact_statistics(device_name: str | None = None):
+	"""Per-device overlap by **phone number** and by **saved contact name** (case-insensitive, trimmed).
+
+	Returns mutual_number_rows, mutual_contact_rows, and a combined summary.
+	"""
+	frappe.has_permission("Device Id", "read", throw=True)
+	device_name = (device_name or "").strip()
+	if not device_name:
+		frappe.throw(_("Device is required"))
+	if not frappe.db.exists("Device Id", device_name):
+		frappe.throw(_("Device Id {0} was not found").format(device_name))
+
+	rows, phone_map = _device_contact_rows()
+	contact_map = _contact_name_map_from_rows(rows)
+
+	device_label = None
+	for r in rows:
+		if r.device_name == device_name:
+			device_label = r.owner_label
+			break
+	if device_label is None:
+		device_label = frappe.db.get_value("Device Id", device_name, "odner_name") or device_name
+		device_label = (device_label or "").strip() or device_name
+
+	total_child_rows = 0
+	local_by_phone: dict[str, list] = {}
+	local_by_contact: dict[str, list] = {}
+
+	for r in rows:
+		if r.device_name != device_name:
+			continue
+		total_child_rows += 1
+		pn = _normalize_phone(r.phone_number)
+		if pn:
+			local_by_phone.setdefault(pn, []).append(r)
+		cn_key = _normalize_contact_name(r.get("contact_name"))
+		if cn_key:
+			local_by_contact.setdefault(cn_key, []).append(r)
+
+	unique_with_phone = len(local_by_phone)
+	unique_with_contact_name = len(local_by_contact)
+
+	mutual_number_rows: list[dict] = []
+	other_devices_phone: set[str] = set()
+
+	for norm, local_entries in local_by_phone.items():
+		entries = phone_map.get(norm, [])
+		owners = {e["device_name"] for e in entries}
+		if len(owners) < 2:
+			continue
+
+		primary = local_entries[0]
+		phone_display = (primary.get("phone_number") or "").strip() or norm
+
+		seen_cn: list[str] = []
+		for le in local_entries:
+			cn = (le.get("contact_name") or "").strip() or _("(no name)")
+			if cn not in seen_cn:
+				seen_cn.append(cn)
+
+		others: list[dict] = []
+		for e in entries:
+			if e["device_name"] == device_name:
+				continue
+			others.append(
+				{
+					"device_name": e["device_name"],
+					"owner_label": e["owner_label"],
+					"contact_name": (e.get("contact_name") or "").strip() or _("(no name)"),
+					"phone_display": e.get("phone_display") or norm,
+				}
+			)
+			other_devices_phone.add(e["device_name"])
+
+		others.sort(key=lambda x: (x["device_name"], x["contact_name"]))
+
+		mutual_number_rows.append(
+			{
+				"phone_norm": norm,
+				"phone_display": phone_display,
+				"contact_names_on_device": seen_cn,
+				"total_devices_with_number": len(owners),
+				"other_devices_count": len(owners) - 1,
+				"other_devices": others,
+			}
+		)
+
+	mutual_number_rows.sort(key=lambda x: (-x["total_devices_with_number"], str(x["phone_display"])))
+
+	mutual_contact_rows: list[dict] = []
+	other_devices_contact: set[str] = set()
+
+	for cn_key, local_entries in local_by_contact.items():
+		entries = contact_map.get(cn_key, [])
+		owners = {e["device_name"] for e in entries}
+		if len(owners) < 2:
+			continue
+
+		# Prefer longest / first raw display name on this device for the label
+		raw_names = [(le.get("contact_name") or "").strip() for le in local_entries]
+		raw_names = [x for x in raw_names if x]
+		contact_display = max(raw_names, key=len) if raw_names else cn_key
+
+		phones_here: list[str] = []
+		for le in local_entries:
+			pd = (le.get("phone_number") or "").strip()
+			n = _normalize_phone(le.get("phone_number"))
+			show = pd or n or ""
+			if show and show not in phones_here:
+				phones_here.append(show)
+
+		others: list[dict] = []
+		for e in entries:
+			if e["device_name"] == device_name:
+				continue
+			others.append(
+				{
+					"device_name": e["device_name"],
+					"owner_label": e["owner_label"],
+					"contact_name": e.get("contact_name") or _("(no name)"),
+					"phone_display": e.get("phone_display") or _("(no number)"),
+				}
+			)
+			other_devices_contact.add(e["device_name"])
+
+		others.sort(key=lambda x: (x["device_name"], x["contact_name"]))
+
+		mutual_contact_rows.append(
+			{
+				"contact_key": cn_key,
+				"contact_display": contact_display,
+				"phones_on_device": phones_here,
+				"total_devices_with_contact_name": len(owners),
+				"other_devices_count": len(owners) - 1,
+				"other_devices": others,
+			}
+		)
+
+	mutual_contact_rows.sort(
+		key=lambda x: (-x["total_devices_with_contact_name"], str(x["contact_display"]))
+	)
+
+	combined_other = other_devices_phone | other_devices_contact
+
+	global_stats = {
+		"device_rows": len(frappe.get_all("Device Id", pluck="name")),
+		"unique_phones_in_system": len(phone_map),
+		"unique_contact_names_in_system": len(contact_map),
+	}
+
+	summary = {
+		"device_name": device_name,
+		"owner_label": device_label,
+		"total_contact_rows_on_device": total_child_rows,
+		"unique_numbers_on_device_with_phone": unique_with_phone,
+		"unique_contact_names_on_device": unique_with_contact_name,
+		"mutual_numbers_count": len(mutual_number_rows),
+		"mutual_contact_names_count": len(mutual_contact_rows),
+		"unique_other_devices_via_phone": len(other_devices_phone),
+		"unique_other_devices_via_contact_name": len(other_devices_contact),
+		"unique_other_devices_combined": len(combined_other),
+		# same as unique_other_devices_via_phone — kept for older clients
+		"unique_other_devices_reachable": len(other_devices_phone),
+		**global_stats,
+	}
+
+	return {
+		"summary": summary,
+		"mutual_number_rows": mutual_number_rows,
+		"mutual_contact_rows": mutual_contact_rows,
+	}
+
+
+@frappe.whitelist()
+def get_device_shared_number_statistics(device_name: str | None = None):
+	"""Backward-compatible alias: same payload shape as before the contact-name tables were added."""
+	out = get_device_contact_statistics(device_name)
+	return {
+		"summary": out["summary"],
+		"mutual_rows": out["mutual_number_rows"],
+	}
 
 
 @frappe.whitelist()

@@ -7,6 +7,7 @@
  "engine": "InnoDB",
  "field_order": [
   "odner_name",
+  "device_id_contact",
   "owner_image",
   "column_break_aslf",
   "image_view",
@@ -43,13 +44,18 @@
   {
    "fieldname": "section_break_eifu",
    "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "device_id_contact",
+   "fieldtype": "Data",
+   "label": "Device ID Contact"
   }
  ],
  "grid_page_length": 50,
  "hide_toolbar": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-12 08:08:58.120547",
+ "modified": "2026-04-12 08:15:02.627180",
  "modified_by": "Administrator",
  "module": "Contactlink",
  "name": "Device Id",

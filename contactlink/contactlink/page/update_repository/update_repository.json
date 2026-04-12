@@ -1,0 +1,23 @@
+{
+ "content": null,
+ "creation": "2026-04-12 08:32:58.025021",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-04-12 08:32:58.025021",
+ "modified_by": "Administrator",
+ "module": "Contactlink",
+ "name": "update-repository",
+ "owner": "Administrator",
+ "page_name": "update-repository",
+ "roles": [
+  {
+   "role": "All"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 1,
+ "title": "Update Repository"
+}

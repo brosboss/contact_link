@@ -1,0 +1,23 @@
+{
+ "content": null,
+ "creation": "2026-04-12 08:40:10.926647",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-04-12 08:40:10.926647",
+ "modified_by": "Administrator",
+ "module": "Contactlink",
+ "name": "phone-number-statist",
+ "owner": "Administrator",
+ "page_name": "phone-number-statist",
+ "roles": [
+  {
+   "role": "All"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 1,
+ "title": "Phone Number Statistics"
+}
