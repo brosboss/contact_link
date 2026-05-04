@@ -1,1 +1,5 @@
+<<<<<<< HEAD
 this is a test now things okay
+=======
+this is a test contact switching xxxxxxxxxxx
+>>>>>>> contact_link_dev
