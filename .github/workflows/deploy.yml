@@ -12,10 +12,14 @@ jobs:
       - name: Update Application
         run: |
           cd ~/frappe-bench15
-          # Use your specific repository URL
-          bench get-app contactlink https://github.com/brosboss/contact_link.git --overwrite
+          # Use your specific repository 
+          #bench get-app contactlink https://github.com/brosboss/contact_link.git --overwrite
           
-          # Replace 'your_site_name' with your actual site folder name
+          # Pull the latest code
+          bench get-app contactlink https://github.com/brosboss/contact_link.git
+          
+          # Run migrations for your site
           bench --site contactlink.local migrate
           
+          # Restart to apply changes
           bench restart
