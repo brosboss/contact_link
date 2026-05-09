@@ -600,7 +600,13 @@ def get_device_id_popup_details(name: str | None = None):
 
 
 @frappe.whitelist()
-def update_device_entry(name: str | None, odner_name: str | None, owner_image: str | None, device_contact=None):
+def update_device_entry(
+	name: str | None,
+	odner_name: str | None,
+	device_id_contact: str | None = None,
+	owner_image: str | None = None,
+	device_contact=None,
+):
 	"""Update Device Id from the Device Entry desk page.
 
 	Loads the document from the database before applying changes. That way Attach Image
@@ -618,6 +624,7 @@ def update_device_entry(name: str | None, odner_name: str | None, owner_image: s
 	doc.check_permission("write")
 
 	doc.odner_name = (odner_name or "").strip()
+	doc.device_id_contact = (device_id_contact or "").strip()
 	doc.owner_image = (owner_image or "").strip()
 	doc.device_contact = []
 	for row in device_contact:
@@ -628,8 +635,80 @@ def update_device_entry(name: str | None, odner_name: str | None, owner_image: s
 			{
 				"contact_name": (row.get("contact_name") or "").strip(),
 				"phone_number": (row.get("phone_number") or "").strip(),
+				"import_reference": (row.get("import_reference") or "").strip(),
 			},
 		)
 
 	doc.save()
 	return doc.as_dict()
+
+
+@frappe.whitelist()
+def get_device_import_references(device_name: str | None = None):
+	frappe.has_permission("Device Id", "read", throw=True)
+	device_name = (device_name or "").strip()
+	if not device_name:
+		frappe.throw(_("Device Id is required"))
+	if not frappe.db.exists("Device Id", device_name):
+		frappe.throw(_("Device Id {0} was not found").format(device_name))
+
+	refs = frappe.get_all(
+		"Device Contact",
+		filters={
+			"parenttype": "Device Id",
+			"parent": device_name,
+			"import_reference": ["!=", ""],
+		},
+		pluck="import_reference",
+		order_by="modified desc",
+	)
+	ordered_unique: list[str] = []
+	seen = set()
+	for ref in refs:
+		r = (ref or "").strip()
+		if not r or r in seen:
+			continue
+		seen.add(r)
+		ordered_unique.append(r)
+	return ordered_unique
+
+
+@frappe.whitelist()
+def rollback_device_import_reference(device_name: str | None = None, import_reference: str | None = None):
+	device_name = (device_name or "").strip()
+	import_reference = (import_reference or "").strip()
+	if not device_name:
+		frappe.throw(_("Device Id is required"))
+	if not import_reference:
+		frappe.throw(_("Import Reference is required"))
+	if not frappe.db.exists("Device Id", device_name):
+		frappe.throw(_("Device Id {0} was not found").format(device_name))
+
+	doc = frappe.get_doc("Device Id", device_name)
+	doc.check_permission("write")
+
+	remaining_rows = []
+	removed_rows = 0
+	for row in doc.get("device_contact") or []:
+		row_ref = (row.get("import_reference") or "").strip()
+		if row_ref and row_ref == import_reference:
+			removed_rows += 1
+			continue
+		remaining_rows.append(
+			{
+				"doctype": "Device Contact",
+				"contact_name": (row.get("contact_name") or "").strip(),
+				"phone_number": (row.get("phone_number") or "").strip(),
+				"import_reference": row_ref,
+			}
+		)
+
+	doc.device_contact = remaining_rows
+	doc.save()
+
+	return {
+		"device_name": doc.name,
+		"import_reference": import_reference,
+		"removed_rows": removed_rows,
+		"remaining_rows": len(remaining_rows),
+	}

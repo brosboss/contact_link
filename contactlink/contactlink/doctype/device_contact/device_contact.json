@@ -7,7 +7,8 @@
  "engine": "InnoDB",
  "field_order": [
   "phone_number",
-  "contact_name"
+  "contact_name",
+  "import_reference"
  ],
  "fields": [
   {
@@ -23,6 +24,12 @@
    "in_list_view": 1,
    "label": "Contact Name",
    "reqd": 1
+  },
+  {
+   "fieldname": "import_reference",
+   "fieldtype": "Data",
+   "label": "Import Reference",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,

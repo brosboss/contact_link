@@ -6,6 +6,27 @@ frappe.pages["device-page"].on_page_load = function (wrapper) {
 	});
 
 	page.add_inner_button(__("Admin home"), () => frappe.set_route("admin-dashboard"));
+	page.add_inner_button(__("How to use this page"), () => {
+		const guideHtml = `
+			<div>
+				<p>${__("Use this page to create or update a device owner record and manage its contacts.")}</p>
+				<ol style="padding-left: 18px; margin-bottom: 0;">
+					<li>${__("Choose <b>New registration</b> for a new device, or <b>Edit existing device</b> to update one.")}</li>
+					<li>${__("Enter <b>Owner name</b> and optionally upload an <b>Owner photo</b>.")}</li>
+					<li>${__("Enter <b>Device ID Contact</b> (primary phone/email for this device record).")}</li>
+					<li>${__("Add contacts manually with <b>Add contact</b>, or upload CSV with <b>Upload CSV</b>.")}</li>
+					<li>${__("If you import CSV contacts, note the generated <b>Import Reference</b> shown in the import reference field.")}</li>
+					<li>${__("In edit mode, select a past Import Reference in <b>Import rollback</b> to remove those imported contacts.")}</li>
+					<li>${__("Click <b>Save</b> (or <b>Save changes</b>) to persist your entry.")}</li>
+				</ol>
+			</div>
+		`;
+		frappe.msgprint({
+			title: __("Device Entry Guide"),
+			message: guideHtml,
+			wide: true,
+		});
+	});
 
 	new DeviceEntryPage(page);
 };
@@ -16,6 +37,10 @@ class DeviceEntryPage {
 		this.wrapper = $(page.body);
 		this.currentDeviceId = null;
 		this._suppress_link_change = false;
+		this.lastImportedReference = null;
+		this.availableImportReferences = [];
+		this.currentPage = 1;
+		this.pageSize = 50;
 
 		this.render();
 		this.bindEvents();
@@ -68,6 +93,13 @@ class DeviceEntryPage {
 						</div>
 
 						<div class="form-group">
+							<label class="control-label">${__("Device ID Contact")}</label>
+							<input type="text" class="form-control" id="device_id_contact" placeholder="${__(
+								"Primary contact for this device"
+							)}">
+						</div>
+
+						<div class="form-group">
 							<label class="control-label">${__("Owner photo")}</label>
 							<div id="owner_image_control"></div>
 						</div>
@@ -75,7 +107,12 @@ class DeviceEntryPage {
 
 					<div class="contacts-section">
 						<div class="contacts-header">
-							<label class="control-label reqd">${__("Device contacts")}</label>
+							<div>
+								<label class="control-label reqd">${__("Device contacts")}</label>
+								<div class="contacts-stats">
+									${__("Total contacts in list")}: <span id="contacts_total_count">0</span>
+								</div>
+							</div>
 							<div class="contacts-actions">
 								<button class="btn btn-default btn-sm" id="download_contacts_template">
 									<i class="fa fa-download"></i> ${__("Template")}
@@ -92,7 +129,53 @@ class DeviceEntryPage {
 						<p class="contacts-hint">${__(
 							"Download the template for bulk entry. Export from Excel as CSV before uploading."
 						)}</p>
-						<div id="contacts_container"></div>
+						<div class="import-rollback-panel" id="import_rollback_panel" style="display:none;">
+							<div class="form-group import-reference-field">
+								<label class="control-label">${__("Import rollback (Import Reference)")}</label>
+								<div class="import-reference-controls">
+									<select class="form-control" id="import_reference_select">
+										<option value="">${__("Select import reference")}</option>
+									</select>
+									<button class="btn btn-danger btn-sm" id="rollback_import_reference" type="button">
+										<i class="fa fa-undo"></i> ${__("Rollback import")}
+									</button>
+								</div>
+							</div>
+						</div>
+						<div class="current-import-panel" id="current_import_panel" style="display:none;">
+							<div class="form-group import-reference-field">
+								<label class="control-label">${__("Current import reference")}</label>
+								<input type="text" class="form-control" id="current_import_reference" readonly>
+							</div>
+						</div>
+						<div class="contacts-table-wrap">
+							<table class="table table-bordered contacts-table">
+								<thead>
+									<tr>
+										<th>${__("Contact name")}</th>
+										<th>${__("Phone number")}</th>
+										<th style="width: 84px;">${__("Action")}</th>
+									</tr>
+								</thead>
+								<tbody id="contacts_container"></tbody>
+							</table>
+						</div>
+						<div class="contacts-pagination" id="contacts_pagination">
+							<div class="contacts-pagination-left">
+								${__("Showing")} <span id="contacts_page_range">0-0</span>
+							</div>
+							<div class="contacts-pagination-right">
+								<label for="contacts_page_size" class="contacts-pagination-label">${__("Rows per page")}</label>
+								<select id="contacts_page_size" class="form-control input-xs">
+									<option value="25">25</option>
+									<option value="50" selected>50</option>
+									<option value="100">100</option>
+								</select>
+								<button class="btn btn-default btn-sm" id="contacts_prev_page" type="button">${__("Prev")}</button>
+								<span class="contacts-page-indicator" id="contacts_page_indicator">1 / 1</span>
+								<button class="btn btn-default btn-sm" id="contacts_next_page" type="button">${__("Next")}</button>
+							</div>
+						</div>
 					</div>
 
 					<div class="device-entry-actions">
@@ -156,19 +239,29 @@ class DeviceEntryPage {
 	addContactRow(data = {}) {
 		const rowId = `row_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
 		const rowName = data.name ? `data-row-name="${frappe.utils.escape_html(data.name)}"` : "";
+		const importReference = (data.import_reference || "").trim();
+		const rowImportRefAttr = importReference
+			? `data-row-import-reference="${frappe.utils.escape_html(importReference)}"`
+			: "";
 		const row = $(`
-			<div class="contact-row" data-row-id="${rowId}" ${rowName}>
-				<div class="contact-inputs">
+			<tr class="contact-row" data-row-id="${rowId}" ${rowName} ${rowImportRefAttr}>
+				<td>
 					<input type="text" class="form-control contact-name" placeholder="${__("Contact name")}" value="${frappe.utils.escape_html(data.contact_name || "")}">
+				</td>
+				<td>
 					<input type="text" class="form-control contact-phone" placeholder="${__("Phone number")}" value="${frappe.utils.escape_html(data.phone_number || "")}">
-				</div>
-				<button type="button" class="btn btn-danger btn-sm remove-contact-row" title="${__("Remove row")}">
-					<i class="fa fa-trash"></i>
-				</button>
-			</div>
+				</td>
+				<td>
+					<button type="button" class="btn btn-danger btn-sm remove-contact-row" title="${__("Remove row")}">
+						<i class="fa fa-trash"></i>
+					</button>
+				</td>
+			</tr>
 		`);
 
 		this.wrapper.find("#contacts_container").append(row);
+		this.updateContactStats();
+		this.refreshPagination();
 	}
 
 	bindEvents() {
@@ -179,14 +272,15 @@ class DeviceEntryPage {
 		this.wrapper.on("click", "#download_contacts_template", () => this.downloadTemplate());
 		this.wrapper.on("click", "#upload_contacts_excel", () => this.wrapper.find("#contacts_file_input").trigger("click"));
 		this.wrapper.on("change", "#contacts_file_input", (e) => this.handleContactsUpload(e));
+		this.wrapper.on("click", "#rollback_import_reference", () => this.rollbackImportReference());
+		this.wrapper.on("click", "#contacts_prev_page", () => this.changePage(-1));
+		this.wrapper.on("click", "#contacts_next_page", () => this.changePage(1));
+		this.wrapper.on("change", "#contacts_page_size", (e) => this.setPageSize(e.target.value));
 
 		this.wrapper.on("click", ".remove-contact-row", (e) => {
-			const rows = this.wrapper.find(".contact-row");
-			if (rows.length <= 1) {
-				frappe.show_alert({ message: __("Keep at least one contact row."), indicator: "orange" });
-				return;
-			}
 			$(e.currentTarget).closest(".contact-row").remove();
+			this.updateContactStats();
+			this.refreshPagination();
 		});
 
 		this.wrapper.on("click", "#save_device_entry", () => this.save());
@@ -215,16 +309,31 @@ class DeviceEntryPage {
 				this._suppress_link_change = false;
 			}
 		}
+		if (!isEdit) {
+			this.toggleImportRollbackPanel(false);
+			this.setImportReferenceOptions([]);
+			this.setCurrentImportReference("");
+		} else if (this.currentDeviceId) {
+			this.loadImportReferences();
+		}
 		this.updateSaveButtonText();
 	}
 
 	_clearFormForNewMode() {
 		this.currentDeviceId = null;
+		this.lastImportedReference = null;
+		this.availableImportReferences = [];
 		this.wrapper.find("#owner_name").val("");
+		this.wrapper.find("#device_id_contact").val("");
 		if (this.ownerImageField) this.ownerImageField.set_value("");
 		this.wrapper.find("#contacts_container").empty();
 		this.addContactRow();
+		this.toggleImportRollbackPanel(false);
+		this.setImportReferenceOptions([]);
+		this.setCurrentImportReference("");
 		this.page.set_indicator(__("Draft"), "orange");
+		this.currentPage = 1;
+		this.refreshPagination();
 	}
 
 	_setModeInstruction(isEdit) {
@@ -261,6 +370,7 @@ class DeviceEntryPage {
 				this.currentDeviceId = r.message.name;
 				this.page.set_indicator(__("Editing"), "blue");
 				this.updateSaveButtonText();
+				this.loadImportReferences();
 				frappe.show_alert({
 					message: `${__("Loaded")}: ${r.message.name}`,
 					indicator: "blue",
@@ -272,16 +382,20 @@ class DeviceEntryPage {
 
 	populateForm(doc) {
 		this.wrapper.find("#owner_name").val(doc.odner_name || "");
+		this.wrapper.find("#device_id_contact").val(doc.device_id_contact || "");
 		this.ownerImageField.set_value(doc.owner_image || "");
 		this.wrapper.find("#contacts_container").empty();
+		this.setCurrentImportReference("");
 
 		const contacts = doc.device_contact || [];
 		if (!contacts.length) {
 			this.addContactRow();
+			this.updateContactStats();
 			return;
 		}
 
 		contacts.forEach((row) => this.addContactRow(row));
+		this.updateContactStats();
 	}
 
 	downloadTemplate() {
@@ -327,10 +441,21 @@ class DeviceEntryPage {
 				frappe.confirm(
 					`${__("Import")} ${parsed.length} ${__("contacts and replace the current rows?")}`,
 					() => {
+						const importReference = this.generateImportReference();
 						this.wrapper.find("#contacts_container").empty();
-						parsed.forEach((row) => this.addContactRow(row));
+						parsed.forEach((row) =>
+							this.addContactRow({
+								...row,
+								import_reference: importReference,
+							})
+						);
+						this.lastImportedReference = importReference;
+						this.setCurrentImportReference(importReference);
+						this.updateContactStats();
+						this.currentPage = 1;
+						this.refreshPagination();
 						frappe.show_alert({
-							message: `${__("Imported")} ${parsed.length} ${__("contacts")}.`,
+							message: `${__("Imported")} ${parsed.length} ${__("contacts")} (${__("Ref")}: ${importReference}).`,
 							indicator: "green",
 						});
 					}
@@ -390,6 +515,7 @@ class DeviceEntryPage {
 
 	collectData() {
 		const ownerName = (this.wrapper.find("#owner_name").val() || "").trim();
+		const deviceIdContact = (this.wrapper.find("#device_id_contact").val() || "").trim();
 		const ownerImage = this.ownerImageField.get_value();
 		const contacts = [];
 
@@ -397,18 +523,20 @@ class DeviceEntryPage {
 			const contactName = ($(this).find(".contact-name").val() || "").trim();
 			const phoneNumber = ($(this).find(".contact-phone").val() || "").trim();
 			const rowName = $(this).attr("data-row-name");
+			const importReference = ($(this).attr("data-row-import-reference") || "").trim();
 
 			if (contactName || phoneNumber) {
 				contacts.push({
 					doctype: "Device Contact",
 					name: rowName || undefined,
 					contact_name: contactName,
-					phone_number: phoneNumber
+					phone_number: phoneNumber,
+					import_reference: importReference || undefined,
 				});
 			}
 		});
 
-		return { ownerName, ownerImage, contacts };
+		return { ownerName, deviceIdContact, ownerImage, contacts };
 	}
 
 	validate(data) {
@@ -452,6 +580,7 @@ class DeviceEntryPage {
 				? {
 						name: this.currentDeviceId,
 						odner_name: data.ownerName,
+						device_id_contact: data.deviceIdContact,
 						owner_image: data.ownerImage,
 						device_contact: data.contacts,
 					}
@@ -459,6 +588,7 @@ class DeviceEntryPage {
 						doc: {
 							doctype: "Device Id",
 							odner_name: data.ownerName,
+							device_id_contact: data.deviceIdContact,
 							owner_image: data.ownerImage,
 							device_contact: data.contacts,
 						},
@@ -471,6 +601,7 @@ class DeviceEntryPage {
 							message: `${__("Updated")}: ${this.currentDeviceId}`,
 							indicator: "green",
 						});
+						this.loadImportReferences();
 					} else {
 						frappe.show_alert({ message: __("Saved successfully."), indicator: "green" });
 						this.resetForm();
@@ -488,14 +619,167 @@ class DeviceEntryPage {
 
 	resetForm() {
 		this.currentDeviceId = null;
+		this.lastImportedReference = null;
+		this.availableImportReferences = [];
 		this.wrapper.find("#owner_name").val("");
+		this.wrapper.find("#device_id_contact").val("");
 		if (this.existingDeviceField) this.existingDeviceField.set_value("");
 		this.ownerImageField.set_value("");
 		this.wrapper.find("#contacts_container").empty();
 		this.addContactRow();
+		this.toggleImportRollbackPanel(false);
+		this.setImportReferenceOptions([]);
+		this.setCurrentImportReference("");
 		this.page.set_indicator(__("Draft"), "orange");
 		this.setMode("new");
 		this.updateSaveButtonText();
+		this.updateContactStats();
+		this.currentPage = 1;
+		this.refreshPagination();
+	}
+
+	updateContactStats() {
+		const total = this.wrapper.find(".contact-row").length;
+		this.wrapper.find("#contacts_total_count").text(total);
+	}
+
+	setPageSize(value) {
+		const size = parseInt(value, 10);
+		if (Number.isNaN(size) || size <= 0) return;
+		this.pageSize = size;
+		this.currentPage = 1;
+		this.refreshPagination();
+	}
+
+	changePage(delta) {
+		const totalRows = this.wrapper.find(".contact-row").length;
+		const totalPages = Math.max(1, Math.ceil(totalRows / this.pageSize));
+		this.currentPage = Math.min(totalPages, Math.max(1, this.currentPage + delta));
+		this.refreshPagination();
+	}
+
+	refreshPagination() {
+		const rows = this.wrapper.find(".contact-row");
+		const totalRows = rows.length;
+		const totalPages = Math.max(1, Math.ceil(totalRows / this.pageSize));
+		if (this.currentPage > totalPages) this.currentPage = totalPages;
+		if (this.currentPage < 1) this.currentPage = 1;
+
+		const startIndex = totalRows ? (this.currentPage - 1) * this.pageSize : 0;
+		const endIndex = Math.min(startIndex + this.pageSize, totalRows);
+
+		rows.hide();
+		if (totalRows) {
+			rows.slice(startIndex, endIndex).show();
+		}
+
+		const rangeText = totalRows ? `${startIndex + 1}-${endIndex} ${__("of")} ${totalRows}` : `0-0 ${__("of")} 0`;
+		this.wrapper.find("#contacts_page_range").text(rangeText);
+		this.wrapper.find("#contacts_page_indicator").text(`${this.currentPage} / ${totalPages}`);
+		this.wrapper.find("#contacts_prev_page").prop("disabled", this.currentPage <= 1);
+		this.wrapper.find("#contacts_next_page").prop("disabled", this.currentPage >= totalPages);
+	}
+
+	generateImportReference() {
+		const refs = this.getAllKnownImportReferences();
+		let maxSerial = 0;
+		refs.forEach((ref) => {
+			const match = /^IMP-(\d+)$/i.exec((ref || "").trim());
+			if (!match) return;
+			const serial = parseInt(match[1], 10);
+			if (!Number.isNaN(serial) && serial > maxSerial) maxSerial = serial;
+		});
+		return `IMP-${String(maxSerial + 1).padStart(3, "0")}`;
+	}
+
+	toggleImportRollbackPanel(show) {
+		this.wrapper.find("#import_rollback_panel").toggle(Boolean(show));
+	}
+
+	setImportReferenceOptions(references) {
+		this.availableImportReferences = references || [];
+		const select = this.wrapper.find("#import_reference_select");
+		select.empty().append(`<option value="">${__("Select import reference")}</option>`);
+		(this.availableImportReferences || []).forEach((ref) => {
+			select.append($("<option></option>").val(ref).text(ref));
+		});
+	}
+
+	getAllKnownImportReferences() {
+		const refs = [];
+		(this.availableImportReferences || []).forEach((ref) => {
+			const r = (ref || "").trim();
+			if (r) refs.push(r);
+		});
+		this.wrapper.find(".contact-row").each(function () {
+			const rowRef = ($(this).attr("data-row-import-reference") || "").trim();
+			if (rowRef) refs.push(rowRef);
+		});
+		return [...new Set(refs)];
+	}
+
+	loadImportReferences() {
+		if (!this.currentDeviceId || this.currentMode !== "edit") {
+			this.toggleImportRollbackPanel(false);
+			this.setImportReferenceOptions([]);
+			return;
+		}
+		frappe.call({
+			method: "contactlink.contactlink.api.get_device_import_references",
+			args: { device_name: this.currentDeviceId },
+			callback: (r) => {
+				const refs = (r.message || []).filter(Boolean);
+				this.setImportReferenceOptions(refs);
+				this.toggleImportRollbackPanel(refs.length > 0);
+			},
+		});
+	}
+
+	setCurrentImportReference(reference) {
+		const ref = (reference || "").trim();
+		const panel = this.wrapper.find("#current_import_panel");
+		if (!ref) {
+			this.wrapper.find("#current_import_reference").val("");
+			panel.hide();
+			return;
+		}
+		this.wrapper.find("#current_import_reference").val(ref);
+		panel.show();
+	}
+
+	rollbackImportReference() {
+		const importReference = (this.wrapper.find("#import_reference_select").val() || "").toString().trim();
+		if (!this.currentDeviceId || this.currentMode !== "edit") {
+			frappe.msgprint(__("Switch to Edit existing device and load a Device Id first."));
+			return;
+		}
+		if (!importReference) {
+			frappe.msgprint(__("Select an Import Reference to roll back."));
+			return;
+		}
+
+		frappe.confirm(
+			`${__("Remove all contacts imported with reference")} <b>${frappe.utils.escape_html(importReference)}</b>?`,
+			() => {
+				frappe.dom.freeze(__("Rolling back import…"));
+				frappe.call({
+					method: "contactlink.contactlink.api.rollback_device_import_reference",
+					args: {
+						device_name: this.currentDeviceId,
+						import_reference: importReference,
+					},
+					callback: (r) => {
+						const removed = (r.message && r.message.removed_rows) || 0;
+						frappe.show_alert({
+							message: `${__("Rollback completed. Removed")} ${removed} ${__("contact(s)").toLowerCase()}.`,
+							indicator: "green",
+						});
+						this.loadDeviceDocument(this.currentDeviceId);
+					},
+					always: () => frappe.dom.unfreeze(),
+				});
+			}
+		);
 	}
 
 	updateSaveButtonText() {
@@ -612,22 +896,86 @@ class DeviceEntryPage {
 					flex-wrap: wrap;
 					justify-content: flex-end;
 				}
+				.contacts-stats {
+					margin-top: 4px;
+					font-size: 12px;
+					color: var(--text-muted);
+				}
 				.contacts-hint {
 					margin: 0 0 12px;
 					font-size: 12px;
 					color: var(--text-muted);
 				}
-				.contact-row {
-					display: flex;
-					gap: 10px;
-					align-items: center;
-					margin-bottom: 10px;
+				.contacts-table-wrap {
+					overflow-x: auto;
 				}
-				.contact-inputs {
-					display: grid;
-					grid-template-columns: 1fr 1fr;
+				.contacts-table {
+					margin-bottom: 0;
+				}
+				.contacts-table thead th {
+					font-size: 12px;
+					background: #f8fafc;
+					white-space: nowrap;
+				}
+				.contacts-table td {
+					vertical-align: middle;
+				}
+				.contacts-table .form-control {
+					min-width: 180px;
+				}
+				.contacts-pagination {
+					margin-top: 10px;
+					display: flex;
+					align-items: center;
+					justify-content: space-between;
 					gap: 10px;
-					width: 100%;
+					flex-wrap: wrap;
+				}
+				.contacts-pagination-left {
+					font-size: 12px;
+					color: var(--text-muted);
+				}
+				.contacts-pagination-right {
+					display: flex;
+					align-items: center;
+					gap: 8px;
+					flex-wrap: wrap;
+				}
+				.contacts-pagination-label {
+					font-size: 12px;
+					margin: 0;
+					color: var(--text-muted);
+				}
+				#contacts_page_size {
+					width: 86px;
+					height: 28px;
+				}
+				.contacts-page-indicator {
+					font-size: 12px;
+					min-width: 52px;
+					text-align: center;
+				}
+				.import-rollback-panel {
+					margin: 0 0 10px;
+					padding: 10px;
+					border: 1px dashed var(--border-color, #d5dde7);
+					border-radius: 8px;
+					background: #fafcff;
+				}
+				.current-import-panel {
+					margin: 0 0 10px;
+					padding: 10px;
+					border: 1px solid var(--border-color, #e2e8f0);
+					border-radius: 8px;
+					background: #ffffff;
+				}
+				.import-reference-field {
+					margin: 0;
+				}
+				.import-reference-controls {
+					display: grid;
+					grid-template-columns: minmax(220px, 1fr) auto;
+					gap: 8px;
 				}
 				.device-entry-actions {
 					margin-top: 18px;
@@ -644,7 +992,11 @@ class DeviceEntryPage {
 						width: 100%;
 						justify-content: flex-start;
 					}
-					.contact-inputs {
+					.contacts-pagination {
+						flex-direction: column;
+						align-items: flex-start;
+					}
+					.import-reference-controls {
 						grid-template-columns: 1fr;
 					}
 					.device-entry-card {
