@@ -7,15 +7,15 @@ on:
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    runs-on: self-hosted  # This uses the runner you just installed
     steps:
       - name: Update Application
         run: |
           cd ~/frappe-bench15
-          # Pull latest code from Remote GitHub Repo
-          bench get-app contactlink [https://github.com/brosboss/contact_link.git](https://github.com/brosboss/contact_link.git) --overwrite
-          # Apply database changes for your DocTypes
+          # Use your specific repository URL
+          bench get-app contactlink https://github.com/brosboss/contact_link.git --overwrite
+          
+          # Replace 'your_site_name' with your actual site folder name
           bench --site contactlink.local migrate
           
-          # Refresh the server
           bench restart
