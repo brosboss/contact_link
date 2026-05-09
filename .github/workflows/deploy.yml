@@ -14,8 +14,9 @@ jobs:
           cd ~/frappe-bench15
           # Use your specific repository 
           #bench get-app contactlink https://github.com/brosboss/contact_link.git --overwrite
-          rm -rf contact_link
-          rm -rf contactlink
+    
+          rm -rf apps/contact_link
+          rm -rf apps/contactlink
           # Pull the latest code
           bench get-app contactlink https://github.com/brosboss/contact_link.git
           
