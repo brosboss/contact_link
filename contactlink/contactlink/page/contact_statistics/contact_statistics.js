@@ -8,13 +8,10 @@ frappe.pages["contact-statistics"].on_page_load = function (wrapper) {
 		single_column: true,
 	});
 
-	page.add_inner_button(__("Admin home"), () => frappe.set_route("admin-dashboard"));
-	page.add_inner_button(__("Contact link analysis"), () => frappe.set_route("contact-link-analysi-1"));
-	page.add_inner_button(__("Phone number statistics"), () => frappe.set_route("phone-number-statist"));
-
 	const root_id = "cs-root-" + frappe.utils.get_random(8);
 	const $main = $(page.main);
 	$main.empty();
+	contactlink.inject_pages_nav(page, "contact-statistics");
 	$main.append(`
 		<div id="${root_id}" class="contact-statistics-page" style="padding:4px 2px 32px;max-width:1280px;">
 			<p class="text-muted" style="margin:0 0 12px 0;max-width:960px;line-height:1.5;">
@@ -71,6 +68,9 @@ frappe.pages["contact-statistics"].on_page_load = function (wrapper) {
 	let contactsData = [];
 	/** @type {{ col: string, dir: 'asc'|'desc' }} */
 	let contactsSort = { col: "total", dir: "desc" };
+	/** Last rendered sorted rows (for View popup index lookup after sort). */
+	let lastSortedNumbersRows = [];
+	let lastSortedContactsRows = [];
 
 	const deviceLink = frappe.ui.form.make_control({
 		parent: $root.find("#" + root_id + "-device-link"),
@@ -116,6 +116,60 @@ frappe.pages["contact-statistics"].on_page_load = function (wrapper) {
 		const short = parts.slice(0, 4).join("; ");
 		const more = parts.length > 4 ? ` (+${parts.length - 4})` : "";
 		return `<span title="${esc(full)}">${esc(short + more)}</span>`;
+	}
+
+	function show_where_appears_dialog(context_line, other_devices) {
+		const list = other_devices || [];
+		if (!list.length) {
+			frappe.msgprint(__("This does not appear on other devices."));
+			return;
+		}
+		const rows = list
+			.map((o, i) => {
+				const owner = (o.owner_label || "").trim() || "—";
+				const dev = (o.device_name || "").trim() || "—";
+				const cn = (o.contact_name || "").trim() || "—";
+				const ph = (o.phone_display || "").trim() || "—";
+				const dev_esc = esc(dev);
+				const dev_href =
+					dev && dev !== "—"
+						? `/app/device-id/${encodeURIComponent(dev)}`
+						: "";
+				const dev_cell = dev_href
+					? `<a href="${esc(dev_href)}">${dev_esc}</a>`
+					: dev_esc;
+				return `<tr>
+					<td class="text-muted" style="text-align:right;vertical-align:middle;">${esc(String(i + 1))}</td>
+					<td style="font-family:ui-monospace,Menlo,monospace;font-size:12px;vertical-align:middle;">${dev_cell}</td>
+					<td style="font-size:12px;vertical-align:middle;">${esc(owner)}</td>
+					<td style="font-size:12px;vertical-align:middle;">${esc(cn)}</td>
+					<td style="font-family:ui-monospace,Menlo,monospace;font-size:12px;vertical-align:middle;">${esc(ph)}</td>
+				</tr>`;
+			})
+			.join("");
+		const html = `
+			<p class="text-muted" style="margin:0 0 12px 0;font-size:13px;line-height:1.45;">${esc(context_line)}</p>
+			<div style="max-height:min(60vh,480px);overflow:auto;border:1px solid var(--border-color);border-radius:8px;background:var(--card-bg);">
+				<table class="table table-bordered" style="margin:0;font-size:13px;">
+					<thead>
+						<tr>
+							<th style="width:44px;text-align:right;white-space:nowrap;">${__("S/N")}</th>
+							<th style="white-space:nowrap;">${__("Device Id")}</th>
+							<th style="white-space:nowrap;">${__("Owner / label")}</th>
+							<th style="white-space:nowrap;">${__("Contact name")}</th>
+							<th style="white-space:nowrap;">${__("Phone")}</th>
+						</tr>
+					</thead>
+					<tbody>${rows}</tbody>
+				</table>
+			</div>`;
+		const d = new frappe.ui.Dialog({
+			title: __("Where it appears"),
+			size: "large",
+			fields: [{ fieldname: "body", fieldtype: "HTML" }],
+		});
+		d.fields_dict.body.$wrapper.html(html);
+		d.show();
 	}
 
 	function render_summary(s) {
@@ -270,11 +324,13 @@ frappe.pages["contact-statistics"].on_page_load = function (wrapper) {
 	function render_table_numbers(rows, sortCol, sortDir) {
 		if (!rows.length) {
 			$table_numbers.empty();
+			lastSortedNumbersRows = [];
 			return;
 		}
 		const sc = sortCol || "total";
 		const sd = sortDir || "desc";
 		const sorted = sortRowsNumbers(rows, sc, sd);
+		lastSortedNumbersRows = sorted;
 		const thSort = `cursor:pointer;user-select:none;white-space:nowrap;`;
 		const sortTip = esc(__("Click to sort; click again to reverse order."));
 		const thead = `
@@ -287,6 +343,7 @@ frappe.pages["contact-statistics"].on_page_load = function (wrapper) {
 						__("Distinct devices that have this normalized number anywhere.")
 					)} · ${sortTip}">${__("Total devices with this #")}${sortIndicator(sc, "total", sd)}</th>
 					<th class="cs-sortable text-right" data-sort="other" style="${thSort}" title="${sortTip}">${__("Other devices")}${sortIndicator(sc, "other", sd)}</th>
+					<th style="width:72px;white-space:nowrap;text-align:center;">${__("View")}</th>
 					<th class="cs-sortable" data-sort="where" style="${thSort}min-width:240px;" title="${sortTip}">${__("Where else it appears")}${sortIndicator(sc, "where", sd)}</th>
 				</tr>
 			</thead>`;
@@ -299,6 +356,9 @@ frappe.pages["contact-statistics"].on_page_load = function (wrapper) {
 					<td style="font-size:12px;">${esc(names)}</td>
 					<td style="text-align:right;font-weight:600;">${esc(String(r.total_devices_with_number))}</td>
 					<td style="text-align:right;">${esc(String(r.other_devices_count))}</td>
+					<td style="text-align:center;vertical-align:middle;">
+						<button type="button" class="btn btn-default btn-xs cs-view-where" data-which="numbers" data-idx="${i}">${__("View")}</button>
+					</td>
 					<td style="font-size:12px;line-height:1.45;">${format_other_devices(r.other_devices)}</td>
 				</tr>`;
 			})
@@ -314,11 +374,13 @@ frappe.pages["contact-statistics"].on_page_load = function (wrapper) {
 	function render_table_contacts(rows, sortCol, sortDir) {
 		if (!rows.length) {
 			$table_contacts.empty();
+			lastSortedContactsRows = [];
 			return;
 		}
 		const sc = sortCol || "total";
 		const sd = sortDir || "desc";
 		const sorted = sortRowsContacts(rows, sc, sd);
+		lastSortedContactsRows = sorted;
 		const thSort = `cursor:pointer;user-select:none;white-space:nowrap;`;
 		const sortTip = esc(__("Click to sort; click again to reverse order."));
 		const thead = `
@@ -331,6 +393,7 @@ frappe.pages["contact-statistics"].on_page_load = function (wrapper) {
 						__("Devices that have this same normalized saved name.")
 					)} · ${sortTip}">${__("Total devices with this name")}${sortIndicator(sc, "total", sd)}</th>
 					<th class="cs-sortable text-right" data-sort="other" style="${thSort}" title="${sortTip}">${__("Other devices")}${sortIndicator(sc, "other", sd)}</th>
+					<th style="width:72px;white-space:nowrap;text-align:center;">${__("View")}</th>
 					<th class="cs-sortable" data-sort="where" style="${thSort}min-width:240px;" title="${sortTip}">${__("Where else it appears")}${sortIndicator(sc, "where", sd)}</th>
 				</tr>
 			</thead>`;
@@ -343,6 +406,9 @@ frappe.pages["contact-statistics"].on_page_load = function (wrapper) {
 					<td style="font-family:ui-monospace,Menlo,monospace;font-size:12px;">${esc(phones)}</td>
 					<td style="text-align:right;font-weight:600;">${esc(String(r.total_devices_with_contact_name))}</td>
 					<td style="text-align:right;">${esc(String(r.other_devices_count))}</td>
+					<td style="text-align:center;vertical-align:middle;">
+						<button type="button" class="btn btn-default btn-xs cs-view-where" data-which="contacts" data-idx="${i}">${__("View")}</button>
+					</td>
 					<td style="font-size:12px;line-height:1.45;">${format_other_devices(r.other_devices)}</td>
 				</tr>`;
 			})
@@ -466,6 +532,30 @@ frappe.pages["contact-statistics"].on_page_load = function (wrapper) {
 			contactsSort = { col, dir: "asc" };
 		}
 		render_table_contacts(contactsData, contactsSort.col, contactsSort.dir);
+	});
+
+	$root.on("click", ".cs-view-where", function (e) {
+		e.preventDefault();
+		e.stopPropagation();
+		const which = $(this).attr("data-which");
+		const idx = parseInt($(this).attr("data-idx"), 10);
+		if (which === "numbers") {
+			const row = lastSortedNumbersRows[idx];
+			if (!row) {
+				return;
+			}
+			const ctx = __("Phone on this device: {0}", [row.phone_display || "—"]);
+			show_where_appears_dialog(ctx, row.other_devices);
+			return;
+		}
+		if (which === "contacts") {
+			const row = lastSortedContactsRows[idx];
+			if (!row) {
+				return;
+			}
+			const ctx = __("Contact name on this device: {0}", [row.contact_display || "—"]);
+			show_where_appears_dialog(ctx, row.other_devices);
+		}
 	});
 
 	$root.find(".cs-refresh").on("click", fetch_stats);

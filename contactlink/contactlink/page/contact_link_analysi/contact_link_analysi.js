@@ -254,6 +254,7 @@ frappe.pages["contact-link-analysi"].on_page_load = function (wrapper) {
 	$main.append(html);
 
 	const $root = $main.find("#" + root_id);
+	contactlink.inject_pages_nav(page, "contact-link-analysi", { parent: $root.find(".cl-inner").first() });
 	const $net = $root.find(".cl-network");
 	const $loading = $root.find(".cl-loading");
 	const $detail = $root.find(".cl-detail");

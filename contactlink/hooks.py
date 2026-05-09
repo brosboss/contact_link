@@ -40,7 +40,15 @@ app_license = "mit"
 # webform_include_css = {"doctype": "public/css/doctype.css"}
 
 # include js in page
-# page_js = {"page" : "public/js/file.js"}
+page_js = {
+	"admin-dashboard": "public/js/contactlink_pages_nav.js",
+	"contact-link-analysi": "public/js/contactlink_pages_nav.js",
+	"contact-link-analysi-1": "public/js/contactlink_pages_nav.js",
+	"device-page": "public/js/contactlink_pages_nav.js",
+	"contact-statistics": "public/js/contactlink_pages_nav.js",
+	"phone-number-statist": "public/js/contactlink_pages_nav.js",
+	"update-repository": "public/js/contactlink_pages_nav.js",
+}
 
 # include js in doctype views
 # doctype_js = {"doctype" : "public/js/doctype.js"}

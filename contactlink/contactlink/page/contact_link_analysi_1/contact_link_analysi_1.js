@@ -17,10 +17,9 @@ frappe.pages['contact-link-analysi-1'].on_page_load = function(wrapper) {
 		single_column: true,
 	});
 
-	page.add_inner_button(__("Admin home"), () => frappe.set_route("admin-dashboard"));
-
 	const $main = $(page.main);
 	$main.empty();
+	contactlink.inject_pages_nav(page, "contact-link-analysi-1");
 
 	const root_id = "cl-analysis-" + frappe.utils.get_random(8);
 	const html = `

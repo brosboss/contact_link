@@ -5,7 +5,6 @@ frappe.pages["device-page"].on_page_load = function (wrapper) {
 		single_column: true
 	});
 
-	page.add_inner_button(__("Admin home"), () => frappe.set_route("admin-dashboard"));
 	page.add_inner_button(__("How to use this page"), () => {
 		const guideHtml = `
 			<div>
@@ -48,7 +47,9 @@ class DeviceEntryPage {
 	}
 
 	render() {
-		this.wrapper.empty().append(`
+		this.wrapper.empty();
+		contactlink.inject_pages_nav(this.page, "device-page", { parent: this.wrapper });
+		this.wrapper.append(`
 			<div class="device-entry-page">
 				<div class="device-entry-card">
 					<div class="device-entry-head">

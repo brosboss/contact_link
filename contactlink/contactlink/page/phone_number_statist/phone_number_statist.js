@@ -8,13 +8,10 @@ frappe.pages["phone-number-statist"].on_page_load = function (wrapper) {
 		single_column: true,
 	});
 
-	page.add_inner_button(__("Admin home"), () => frappe.set_route("admin-dashboard"));
-	page.add_inner_button(__("Contact link analysis"), () => frappe.set_route("contact-link-analysi-1"));
-	page.add_inner_button(__("Contact statistics"), () => frappe.set_route("contact-statistics"));
-
 	const root_id = "pns-root-" + frappe.utils.get_random(8);
 	const $main = $(page.main);
 	$main.empty();
+	contactlink.inject_pages_nav(page, "phone-number-statist");
 	$main.append(`
 		<div id="${root_id}" class="phone-number-statistics-page" style="padding:4px 2px 32px;max-width:1280px;">
 			<p class="text-muted" style="margin:0 0 12px 0;max-width:960px;line-height:1.5;">

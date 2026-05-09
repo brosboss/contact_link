@@ -8,11 +8,10 @@ frappe.pages["update-repository"].on_page_load = function (wrapper) {
 		single_column: true,
 	});
 
-	page.add_inner_button(__("Admin home"), () => frappe.set_route("admin-dashboard"));
-
 	const root_id = "ur-root-" + frappe.utils.get_random(8);
 	const $main = $(page.main);
 	$main.empty();
+	contactlink.inject_pages_nav(page, "update-repository");
 	$main.append(`
 		<div id="${root_id}" style="padding:4px 2px 32px;max-width:880px;">
 			<p class="text-muted" style="margin:0 0 16px 0;line-height:1.5;">

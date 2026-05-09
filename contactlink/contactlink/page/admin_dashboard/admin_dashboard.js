@@ -5,6 +5,8 @@ frappe.pages["admin-dashboard"].on_page_load = function (wrapper) {
 		single_column: false,
 	});
 
+	contactlink.inject_pages_nav(page, "admin-dashboard");
+
 	const tools = [
 		{
 			route: "contact-link-analysi-1",
@@ -29,6 +31,12 @@ frappe.pages["admin-dashboard"].on_page_load = function (wrapper) {
 			title: __("Phone Number Statistics"),
 			blurb: __("Analyze phone number usage and counts."),
 			icon: "fa fa-phone",
+		},
+		{
+			route: "update-repository",
+			title: __("Update Repository"),
+			blurb: __("Pull the latest Contactlink code on this server from git."),
+			icon: "fa fa-code-fork",
 		},
 	];
 
