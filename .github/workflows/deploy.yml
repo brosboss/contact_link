@@ -1,0 +1,21 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Update Application
+        run: |
+          cd ~/frappe-bench15
+          # Pull latest code from Remote GitHub Repo
+          bench get-app contactlink [https://github.com/brosboss/contact_link.git](https://github.com/brosboss/contact_link.git) --overwrite
+          # Apply database changes for your DocTypes
+          bench --site contactlink.local migrate
+          
+          # Refresh the server
+          bench restart
