@@ -42,6 +42,7 @@ app_license = "mit"
 # include js in page
 page_js = {
 	"admin-dashboard": "public/js/contactlink_pages_nav.js",
+	"contact-link-tutoria": "public/js/contactlink_pages_nav.js",
 	"contact-link-analysi": "public/js/contactlink_pages_nav.js",
 	"contact-link-analysi-1": "public/js/contactlink_pages_nav.js",
 	"device-page": "public/js/contactlink_pages_nav.js",

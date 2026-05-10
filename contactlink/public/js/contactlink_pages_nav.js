@@ -5,6 +5,7 @@ frappe.provide("contactlink");
 
 contactlink.PAGES_NAV_ROUTES = [
 	{ route: "admin-dashboard", label_msg: "Admin home" },
+	{ route: "contact-link-tutoria", label_msg: "Tutorial" },
 	{ route: "contact-link-analysi-1", label_msg: "Contact link analysis" },
 	{ route: "device-page", label_msg: "Device Entry" },
 	{ route: "contact-statistics", label_msg: "Contact statistics" },

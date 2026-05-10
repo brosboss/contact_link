@@ -9,6 +9,12 @@ frappe.pages["admin-dashboard"].on_page_load = function (wrapper) {
 
 	const tools = [
 		{
+			route: "contact-link-tutoria",
+			title: __("Contact Link Tutorial"),
+			blurb: __("Step-by-step guide to Device Entry, graphs, and statistics."),
+			icon: "fa fa-book",
+		},
+		{
 			route: "contact-link-analysi-1",
 			title: __("Contact link analysis"),
 			blurb: __("Map how device owners connect through shared phone numbers."),

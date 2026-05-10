@@ -1,0 +1,23 @@
+{
+ "content": null,
+ "creation": "2026-05-10 11:06:14.714751",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-05-10 11:06:14.714751",
+ "modified_by": "Administrator",
+ "module": "Contactlink",
+ "name": "contact-link-tutoria",
+ "owner": "Administrator",
+ "page_name": "contact-link-tutoria",
+ "roles": [
+  {
+   "role": "All"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 1,
+ "title": "Contact Link Tutorial"
+}
