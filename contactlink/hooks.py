@@ -27,7 +27,8 @@ app_license = "mit"
 # include js, css files in header of desk.html
 # app_include_css = "/assets/contactlink/css/contactlink.css"
 # app_include_js = "/assets/contactlink/js/contactlink.js"
-
+# link to favicon "/home/harry/frappe-bench-version-15/apps/contactlink/contactlink/public/images/nalogo.png"
+favicon = "/assets/contactlink/images/nalogo.png",
 # include js, css files in header of web template
 # web_include_css = "/assets/contactlink/css/contactlink.css"
 # web_include_js = "/assets/contactlink/js/contactlink.js"
