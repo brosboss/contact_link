@@ -9,7 +9,6 @@ contactlink.PAGES_NAV_ROUTES = [
 	{ route: "device-page", label_msg: "Device Entry" },
 	{ route: "contact-statistics", label_msg: "Contact statistics" },
 	{ route: "phone-number-statist", label_msg: "Phone number statistics" },
-	{ route: "update-repository", label_msg: "Update Repository" },
 ];
 
 contactlink._pages_nav_route_is_active = function (item_route, active_route) {

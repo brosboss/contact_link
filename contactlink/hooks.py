@@ -47,7 +47,6 @@ page_js = {
 	"device-page": "public/js/contactlink_pages_nav.js",
 	"contact-statistics": "public/js/contactlink_pages_nav.js",
 	"phone-number-statist": "public/js/contactlink_pages_nav.js",
-	"update-repository": "public/js/contactlink_pages_nav.js",
 }
 
 # include js in doctype views

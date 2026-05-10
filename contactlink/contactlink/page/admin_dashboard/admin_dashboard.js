@@ -32,12 +32,6 @@ frappe.pages["admin-dashboard"].on_page_load = function (wrapper) {
 			blurb: __("Analyze phone number usage and counts."),
 			icon: "fa fa-phone",
 		},
-		{
-			route: "update-repository",
-			title: __("Update Repository"),
-			blurb: __("Pull the latest Contactlink code on this server from git."),
-			icon: "fa fa-code-fork",
-		},
 	];
 
 	const nav_blocks = tools
