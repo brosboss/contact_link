@@ -8,6 +8,7 @@ on:
 jobs:
   deploy:
     runs-on: self-hosted  # This uses the runner you just installed
+    timeout-minutes: 10  # Prevents the "stale" hang forever
     steps:
       - name: Update Application
         run: |
