@@ -1,24 +1,88 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "DEV-.####.-.{odner_name}",
+ "autoname": "format:DEV-{####}",
  "creation": "2026-04-05 17:33:20.308600",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "section_break_device_info",
   "odner_name",
+  "device_details",
+  "column_break_uchy",
+  "sim_types",
+  "device_own_phone_number",
+  "section_break_device_phones",
   "device_id_contact",
-  "owner_image",
   "column_break_aslf",
+  "import_type",
+  "column_break_ousi",
+  "owner_image",
   "image_view",
+  "section_break_import_stats",
+  "total_contacts",
+  "column_break_zchj",
+  "total_imported",
+  "column_break_blme",
+  "duplicates_found",
   "section_break_eifu",
   "device_contact"
  ],
  "fields": [
   {
+   "fieldname": "section_break_device_info",
+   "fieldtype": "Section Break",
+   "label": "Device Information"
+  },
+  {
+   "description": "Set after import, e.g. Harrison",
    "fieldname": "odner_name",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Owner Name"
+  },
+  {
+   "fieldname": "sim_types",
+   "fieldtype": "Small Text",
+   "label": "SIM Types",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_device_phones",
+   "fieldtype": "Section Break",
+   "label": "Device Phone Numbers"
+  },
+  {
+   "fieldname": "device_own_phone_number",
+   "fieldtype": "Table",
+   "label": "Device Own Phone Numbers",
+   "options": "Device Own Phone Number"
+  },
+  {
+   "fieldname": "device_id_contact",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Device ID Contact",
+   "read_only": 1
+  },
+  {
+   "default": "Manual",
+   "fieldname": "import_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Import Type",
+   "options": "Manual\nAuto from Device",
+   "read_only": 1
+  },
+  {
+   "fieldname": "device_details",
+   "fieldtype": "Small Text",
+   "label": "Device Details",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_aslf",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "owner_image",
@@ -27,39 +91,70 @@
    "read_only": 1
   },
   {
+   "fieldname": "image_view",
+   "fieldtype": "HTML",
+   "label": "Image View"
+  },
+  {
+   "fieldname": "section_break_import_stats",
+   "fieldtype": "Section Break",
+   "label": "Last Import Statistics"
+  },
+  {
+   "fieldname": "total_contacts",
+   "fieldtype": "Int",
+   "label": "Total Contacts",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_imported",
+   "fieldtype": "Int",
+   "label": "Total Imported",
+   "read_only": 1
+  },
+  {
+   "fieldname": "duplicates_found",
+   "fieldtype": "Int",
+   "label": "Duplicates Found",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_eifu",
+   "fieldtype": "Section Break",
+   "label": "Contacts"
+  },
+  {
    "fieldname": "device_contact",
    "fieldtype": "Table",
    "label": "Device Contact",
    "options": "Device Contact"
   },
   {
-   "fieldname": "column_break_aslf",
+   "fieldname": "column_break_ousi",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "image_view",
-   "fieldtype": "HTML",
-   "label": "Image View"
+   "fieldname": "column_break_zchj",
+   "fieldtype": "Column Break"
   },
   {
-   "fieldname": "section_break_eifu",
-   "fieldtype": "Section Break"
+   "fieldname": "column_break_blme",
+   "fieldtype": "Column Break"
   },
   {
-   "fieldname": "device_id_contact",
-   "fieldtype": "Data",
-   "label": "Device ID Contact"
+   "fieldname": "column_break_uchy",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,
  "hide_toolbar": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-12 10:36:22.077893",
+ "modified": "2026-06-09 14:40:21.745338",
  "modified_by": "Administrator",
  "module": "Contactlink",
  "name": "Device Id",
- "naming_rule": "By \"Naming Series\" field",
+ "naming_rule": "Expression",
  "owner": "brossboss123@gmail.com",
  "permissions": [
   {
@@ -89,6 +184,7 @@
  ],
  "row_format": "Dynamic",
  "rows_threshold_for_grid_search": 20,
+ "search_fields": "odner_name",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": []

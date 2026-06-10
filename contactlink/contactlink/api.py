@@ -5,11 +5,166 @@ import frappe
 from frappe import _
 
 
+import json
+
+
+def _auto_device_doc_name(device_id: str) -> str:
+	"""Stable Device Id name from ADB serial — survives delete/recreate without series clashes."""
+	safe = "".join(c for c in device_id if c.isalnum() or c in "-_")
+	return f"DEV-{safe or 'UNKNOWN'}"
+
+
+def _get_device_doc_for_sync(device_id: str):
+	"""Find or create the Device Id row for a phone serial."""
+	device_name = frappe.db.get_value("Device Id", {"device_id_contact": device_id}, "name")
+	if device_name:
+		return frappe.get_doc("Device Id", device_name)
+
+	proposed_name = _auto_device_doc_name(device_id)
+	if frappe.db.exists("Device Id", proposed_name):
+		doc = frappe.get_doc("Device Id", proposed_name)
+		if not (doc.get("device_id_contact") or "").strip():
+			doc.device_id_contact = device_id
+		return doc
+
+	doc = frappe.get_doc(
+		{
+			"doctype": "Device Id",
+			"device_id_contact": device_id,
+		}
+	)
+	doc.name = proposed_name
+	doc.flags.name_set = True
+	doc.insert(ignore_permissions=True)
+	return doc
+
+
+def _set_import_statistics(
+	doc,
+	*,
+	import_type: str,
+	total_contacts: int,
+	total_imported: int,
+	duplicates_found: int,
+	device_details: str | None = None,
+	sim_types: str | None = None,
+):
+	doc.import_type = import_type
+	doc.total_contacts = int(total_contacts or 0)
+	doc.total_imported = int(total_imported or 0)
+	doc.duplicates_found = int(duplicates_found or 0)
+	if device_details:
+		doc.device_details = device_details.strip()
+	if sim_types and not (doc.get("sim_types") or "").strip():
+		doc.sim_types = sim_types.strip()
+
+
+@frappe.whitelist(allow_guest=False)
+def sync_device_contacts(device_id, contacts, device_details=None, sim_types=None, sim_number=None):
+	"""Import contacts from a USB-connected phone (ADB serial) into Device Id."""
+	# Backward compatibility: old clients sent carrier text as sim_number
+	if not sim_types and sim_number:
+		sim_types = sim_number
+	device_id = (device_id or "").strip()
+	if not device_id:
+		frappe.throw(_("Device ID is required"))
+
+	if isinstance(contacts, str):
+		contacts = json.loads(contacts)
+	contacts = contacts or []
+
+	doc = _get_device_doc_for_sync(device_id)
+
+	existing_phones: set[str] = set()
+	for row in frappe.db.sql(
+		"""
+		SELECT phone_number
+		FROM `tabDevice Contact`
+		WHERE parent = %s AND parenttype = 'Device Id'
+		""",
+		doc.name,
+		as_dict=True,
+	):
+		phone_norm = _normalize_phone(row.get("phone_number"))
+		if phone_norm:
+			existing_phones.add(phone_norm)
+	contacts_before = len(existing_phones)
+
+	import_ref = f"adb-sync-{frappe.utils.now_datetime().strftime('%Y%m%d%H%M%S')}"
+	new_records = 0
+	duplicates_found = 0
+	suspect_hits_in_batch = 0
+	rows_on_device = 0
+	unique_on_device: set[str] = set()
+
+	from contactlink.contactlink.suspect import _get_suspect_phone_map
+
+	suspect_map = _get_suspect_phone_map()
+
+	for record in contacts:
+		if not isinstance(record, dict):
+			continue
+		name = (record.get("contact_name") or "").strip()
+		phone = (record.get("phone_number") or "").strip()
+		phone_norm = _normalize_phone(phone)
+		if not phone_norm:
+			continue
+		rows_on_device += 1
+		unique_on_device.add(phone_norm)
+		if phone_norm in existing_phones:
+			duplicates_found += 1
+			continue
+		if phone_norm in suspect_map:
+			suspect_hits_in_batch += 1
+		doc.append(
+			"device_contact",
+			{
+				"contact_name": name or phone,
+				"phone_number": phone,
+				"import_reference": import_ref,
+			},
+		)
+		existing_phones.add(phone_norm)
+		new_records += 1
+
+	_set_import_statistics(
+		doc,
+		import_type="Auto from Device",
+		total_contacts=rows_on_device,
+		total_imported=new_records,
+		duplicates_found=duplicates_found,
+		device_details=device_details,
+		sim_types=sim_types,
+	)
+	doc.save(ignore_permissions=True)
+
+	frappe.db.commit()
+	return {
+		"status": "success",
+		"device_name": doc.name,
+		"suspect_hits_in_batch": suspect_hits_in_batch,
+		"new_records_synced": new_records,
+		"rows_on_device": rows_on_device,
+		"unique_numbers_on_device": len(unique_on_device),
+		"contacts_stored_before": contacts_before,
+		"contacts_stored_after": contacts_before + new_records,
+		"total_contacts": rows_on_device,
+		"duplicates_found": duplicates_found,
+		"import_reference": import_ref if new_records else None,
+	}
+
 def _normalize_phone(phone: str | None) -> str:
+	"""Digits-only canonical form; 080… and +234… treated as the same Nigerian mobile."""
 	if not phone:
 		return ""
 	digits = "".join(c for c in str(phone) if c.isdigit())
-	return digits or str(phone).strip()
+	if not digits:
+		return str(phone).strip()
+	if len(digits) == 11 and digits.startswith("0"):
+		return "234" + digits[1:]
+	if len(digits) == 10 and digits[0] in "789":
+		return "234" + digits
+	return digits
 
 
 def _normalize_contact_name(name: str | None) -> str:
@@ -551,6 +706,9 @@ def get_phone_number_statistics(phone: str | None = None):
 		"unique_phones_in_system": len(phone_map),
 	}
 
+	from contactlink.contactlink.suspect import suspect_info_for_phone
+
+	suspect_info = suspect_info_for_phone(norm)
 	summary = {
 		"phone_norm": norm,
 		"phone_display": primary_display,
@@ -558,6 +716,8 @@ def get_phone_number_statistics(phone: str | None = None):
 		"distinct_devices": len(devices),
 		"distinct_saved_names": len(name_keys),
 		"found": bool(entries),
+		"is_suspect_number": suspect_info["is_suspect"],
+		"suspect_matches": suspect_info["suspect_matches"],
 		**global_stats,
 	}
 
@@ -582,18 +742,38 @@ def get_device_id_popup_details(name: str | None = None):
 
 	img_url = _owner_image_url(doc.get("owner_image"))
 	contacts: list[dict] = []
+	from contactlink.contactlink.suspect import _get_suspect_phone_map, annotate_contact_row
+
+	suspect_map = _get_suspect_phone_map()
 	for row in doc.get("device_contact") or []:
 		contacts.append(
-			{
-				"contact_name": (row.get("contact_name") or "").strip(),
-				"phone_number": (row.get("phone_number") or "").strip(),
-			}
+			annotate_contact_row(
+				{
+					"contact_name": (row.get("contact_name") or "").strip(),
+					"phone_number": (row.get("phone_number") or "").strip(),
+				},
+				suspect_map,
+			)
 		)
 
 	return {
 		"name": doc.name,
 		"odner_name": (doc.get("odner_name") or "").strip(),
+		"sim_types": (doc.get("sim_types") or "").strip(),
+		"device_own_phone_number": [
+			{
+				"sim_slot": (row.get("sim_slot") or "SIM 1").strip(),
+				"phone_number": (row.get("phone_number") or "").strip(),
+				"label": (row.get("label") or "").strip(),
+			}
+			for row in doc.get("device_own_phone_number") or []
+		],
 		"device_id_contact": (doc.get("device_id_contact") or "").strip(),
+		"import_type": (doc.get("import_type") or "").strip(),
+		"device_details": (doc.get("device_details") or "").strip(),
+		"total_contacts": doc.get("total_contacts") or 0,
+		"total_imported": doc.get("total_imported") or 0,
+		"duplicates_found": doc.get("duplicates_found") or 0,
 		"owner_image_url": img_url,
 		"contacts": contacts,
 	}
@@ -606,6 +786,10 @@ def update_device_entry(
 	device_id_contact: str | None = None,
 	owner_image: str | None = None,
 	device_contact=None,
+	device_own_phone_number=None,
+	total_contacts: int | None = None,
+	total_imported: int | None = None,
+	duplicates_found: int | None = None,
 ):
 	"""Update Device Id from the Device Entry desk page.
 
@@ -618,7 +802,10 @@ def update_device_entry(
 
 	if isinstance(device_contact, str):
 		device_contact = frappe.parse_json(device_contact)
+	if isinstance(device_own_phone_number, str):
+		device_own_phone_number = frappe.parse_json(device_own_phone_number)
 	device_contact = device_contact or []
+	device_own_phone_number = device_own_phone_number or []
 
 	doc = frappe.get_doc("Device Id", name)
 	doc.check_permission("write")
@@ -626,6 +813,21 @@ def update_device_entry(
 	doc.odner_name = (odner_name or "").strip()
 	doc.device_id_contact = (device_id_contact or "").strip()
 	doc.owner_image = (owner_image or "").strip()
+	doc.device_own_phone_number = []
+	for row in device_own_phone_number:
+		if not isinstance(row, dict):
+			continue
+		phone = (row.get("phone_number") or "").strip()
+		if not phone:
+			continue
+		doc.append(
+			"device_own_phone_number",
+			{
+				"sim_slot": (row.get("sim_slot") or "SIM 1").strip(),
+				"phone_number": phone,
+				"label": (row.get("label") or "").strip(),
+			},
+		)
 	doc.device_contact = []
 	for row in device_contact:
 		if not isinstance(row, dict):
@@ -638,6 +840,15 @@ def update_device_entry(
 				"import_reference": (row.get("import_reference") or "").strip(),
 			},
 		)
+
+	saved_contacts = len(doc.get("device_contact") or [])
+	_set_import_statistics(
+		doc,
+		import_type="Manual",
+		total_contacts=total_contacts if total_contacts is not None else saved_contacts,
+		total_imported=total_imported if total_imported is not None else saved_contacts,
+		duplicates_found=duplicates_found if duplicates_found is not None else 0,
+	)
 
 	doc.save()
 	return doc.as_dict()
@@ -712,3 +923,55 @@ def rollback_device_import_reference(device_name: str | None = None, import_refe
 		"removed_rows": removed_rows,
 		"remaining_rows": len(remaining_rows),
 	}
+
+
+@frappe.whitelist()
+def get_suspect_phone_index():
+	"""Normalized phone → active suspect profile matches (cached)."""
+	frappe.has_permission("Suspect Profile", "read", throw=True)
+	from contactlink.contactlink.suspect import _get_suspect_phone_map
+
+	return {"index": _get_suspect_phone_map()}
+
+
+@frappe.whitelist()
+def get_device_suspect_hits(device_name: str | None = None):
+	frappe.has_permission("Device Id", "read", throw=True)
+	device_name = (device_name or "").strip()
+	if not device_name:
+		frappe.throw(_("Device Id is required"))
+	if not frappe.db.exists("Device Id", device_name):
+		frappe.throw(_("Device Id {0} was not found").format(device_name))
+
+	from contactlink.contactlink.suspect import get_device_suspect_hits as _hits
+
+	return _hits(device_name)
+
+
+@frappe.whitelist()
+def get_investigation_suspect_report():
+	frappe.has_permission("Suspect Profile", "read", throw=True)
+	from contactlink.contactlink.suspect import get_investigation_suspect_report as _report
+
+	return _report()
+
+
+@frappe.whitelist()
+def get_mobile_importer_status(log_offset: int | None = 0):
+	from contactlink.contactlink.mobile_importer.manager import get_importer_status
+
+	return get_importer_status(int(log_offset or 0))
+
+
+@frappe.whitelist()
+def start_mobile_importer():
+	from contactlink.contactlink.mobile_importer.manager import start_importer
+
+	return start_importer()
+
+
+@frappe.whitelist()
+def stop_mobile_importer():
+	from contactlink.contactlink.mobile_importer.manager import stop_importer
+
+	return stop_importer()

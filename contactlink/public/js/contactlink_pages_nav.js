@@ -8,6 +8,8 @@ contactlink.PAGES_NAV_ROUTES = [
 	{ route: "contact-link-tutoria", label_msg: "Tutorial" },
 	{ route: "contact-link-analysi-1", label_msg: "Contact link analysis" },
 	{ route: "device-page", label_msg: "Device Entry" },
+	{ route: "mobile-auto-importer", label_msg: "Mobile importer" },
+	{ route: "List/Suspect Profile", label_msg: "Suspect profiles", external: true },
 	{ route: "contact-statistics", label_msg: "Contact statistics" },
 	{ route: "phone-number-statist", label_msg: "Phone number statistics" },
 ];
@@ -79,8 +81,15 @@ contactlink.inject_pages_nav = function (page, active_route, opts) {
 		.on("click.cl_pages_nav", ".cl-pages-nav-inner [data-route]", function (e) {
 			e.preventDefault();
 			const r = $(this).attr("data-route");
-			if (r && !contactlink._pages_nav_route_is_active(r, active_route)) {
-				frappe.set_route(r);
+			if (!r || contactlink._pages_nav_route_is_active(r, active_route)) {
+				return;
 			}
+			const item = (contactlink.PAGES_NAV_ROUTES || []).find((x) => x.route === r);
+			if (item && item.external) {
+				const parts = String(r).split("/");
+				frappe.set_route(parts[0], parts.slice(1).join("/"));
+				return;
+			}
+			frappe.set_route(r);
 		});
 };

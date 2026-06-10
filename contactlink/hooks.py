@@ -26,7 +26,7 @@ app_license = "mit"
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/contactlink/css/contactlink.css"
-# app_include_js = "/assets/contactlink/js/contactlink.js"
+app_include_js = "/assets/contactlink/js/contactlink_suspect.js"
 # link to favicon "/home/harry/frappe-bench-version-15/apps/contactlink/contactlink/public/images/nalogo.png"
 favicon = "/assets/contactlink/images/nalogo.png",
 # include js, css files in header of web template
@@ -49,6 +49,7 @@ page_js = {
 	"device-page": "public/js/contactlink_pages_nav.js",
 	"contact-statistics": "public/js/contactlink_pages_nav.js",
 	"phone-number-statist": "public/js/contactlink_pages_nav.js",
+	"mobile-auto-importer": "public/js/contactlink_pages_nav.js",
 }
 
 # include js in doctype views

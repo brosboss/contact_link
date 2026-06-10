@@ -37,13 +37,23 @@ class DeviceEntryPage {
 		this.currentDeviceId = null;
 		this._suppress_link_change = false;
 		this.lastImportedReference = null;
+		this.lastImportStats = null;
 		this.availableImportReferences = [];
 		this.currentPage = 1;
 		this.pageSize = 50;
 
+		this.suspectIndex = null;
 		this.render();
 		this.bindEvents();
 		this.addContactRow();
+		this.addOwnPhoneRow();
+		if (window.contactlink && contactlink.suspect) {
+			contactlink.suspect.load_index().then((index) => {
+				this.suspectIndex = index;
+				this.applySuspectFlags();
+				this.applyOwnPhoneSuspectFlags();
+			});
+		}
 	}
 
 	render() {
@@ -56,6 +66,7 @@ class DeviceEntryPage {
 						<h4>${__("Device owner registration")}</h4>
 						<p>${__("Capture the owner, photo, and related contacts in one place.")}</p>
 					</div>
+					<div class="device-owner-suspect-alert alert alert-danger" id="device_owner_suspect_alert" style="display:none;"></div>
 
 					<div class="device-mode-bar">
 						<div class="mode-toggle" role="group" aria-label="${__("Entry mode")}">
@@ -87,16 +98,23 @@ class DeviceEntryPage {
 
 					<div class="device-entry-grid">
 						<div class="form-group">
-							<label class="control-label reqd">${__("Owner name")}</label>
+							<label class="control-label">${__("Owner name")}</label>
 							<input type="text" class="form-control" id="owner_name" placeholder="${__(
-								"Full name as it should appear in reports"
+								"e.g. Harrison — set after import"
+							)}">
+						</div>
+
+						<div class="form-group">
+							<label class="control-label">${__("SIM types")}</label>
+							<input type="text" class="form-control" id="sim_types" readonly placeholder="${__(
+								"Filled automatically on USB import (e.g. MTN NG, Glo NG)"
 							)}">
 						</div>
 
 						<div class="form-group">
 							<label class="control-label">${__("Device ID Contact")}</label>
 							<input type="text" class="form-control" id="device_id_contact" placeholder="${__(
-								"Primary contact for this device"
+								"ADB serial or primary device identifier"
 							)}">
 						</div>
 
@@ -106,12 +124,54 @@ class DeviceEntryPage {
 						</div>
 					</div>
 
+					<div class="import-stats-panel" id="import_stats_panel" style="display:none;">
+						<h5>${__("Last import statistics")}</h5>
+						<div class="import-stats-grid">
+							<div><span class="text-muted">${__("Import type")}:</span> <span id="import_type_display">—</span></div>
+							<div><span class="text-muted">${__("Device details")}:</span> <span id="device_details_display">—</span></div>
+							<div><span class="text-muted">${__("Total contacts")}:</span> <span id="total_contacts_display">0</span></div>
+							<div><span class="text-muted">${__("Total imported")}:</span> <span id="total_imported_display">0</span></div>
+							<div><span class="text-muted">${__("Duplicates found")}:</span> <span id="duplicates_found_display">0</span></div>
+						</div>
+					</div>
+
+					<div class="device-own-phones-section">
+						<div class="contacts-header">
+							<div>
+								<label class="control-label">${__("Device own phone numbers")}</label>
+								<div class="contacts-stats text-muted">${__(
+									"Enter the handset line number(s) manually — one row per SIM"
+								)}</div>
+							</div>
+							<div class="contacts-actions">
+								<button class="btn btn-default btn-sm" id="add_own_phone_row">
+									<i class="fa fa-plus"></i> ${__("Add line")}
+								</button>
+							</div>
+						</div>
+						<div class="contacts-table-wrap">
+							<table class="table table-bordered contacts-table">
+								<thead>
+									<tr>
+										<th style="width:100px;">${__("SIM slot")}</th>
+										<th>${__("Phone number")}</th>
+										<th>${__("Label")}</th>
+										<th style="width:120px;">${__("Suspect")}</th>
+										<th style="width:84px;">${__("Action")}</th>
+									</tr>
+								</thead>
+								<tbody id="own_phones_container"></tbody>
+							</table>
+						</div>
+					</div>
+
 					<div class="contacts-section">
 						<div class="contacts-header">
 							<div>
 								<label class="control-label reqd">${__("Device contacts")}</label>
 								<div class="contacts-stats">
 									${__("Total contacts in list")}: <span id="contacts_total_count">0</span>
+									<span class="contacts-suspect-stats"> · ${__("Suspect matches")}: <span id="contacts_suspect_count">0</span></span>
 								</div>
 							</div>
 							<div class="contacts-actions">
@@ -155,6 +215,7 @@ class DeviceEntryPage {
 									<tr>
 										<th>${__("Contact name")}</th>
 										<th>${__("Phone number")}</th>
+										<th style="width: 120px;">${__("Suspect")}</th>
 										<th style="width: 84px;">${__("Action")}</th>
 									</tr>
 								</thead>
@@ -237,6 +298,39 @@ class DeviceEntryPage {
 		this.ownerImageField.refresh();
 	}
 
+	addOwnPhoneRow(data = {}) {
+		const slot = data.sim_slot || "SIM 1";
+		const row = $(`
+			<tr class="own-phone-row">
+				<td>
+					<select class="form-control input-sm own-phone-slot">
+						<option value="SIM 1" ${slot === "SIM 1" ? "selected" : ""}>${__("SIM 1")}</option>
+						<option value="SIM 2" ${slot === "SIM 2" ? "selected" : ""}>${__("SIM 2")}</option>
+					</select>
+				</td>
+				<td>
+					<input type="text" class="form-control own-phone-number" placeholder="${__(
+						"Handset line number"
+					)}" value="${frappe.utils.escape_html(data.phone_number || "")}">
+				</td>
+				<td>
+					<input type="text" class="form-control own-phone-label" placeholder="${__(
+						"Optional label"
+					)}" value="${frappe.utils.escape_html(data.label || "")}">
+				</td>
+				<td class="own-phone-suspect-cell"><span class="contact-suspect-label text-muted">—</span></td>
+				<td>
+					<button type="button" class="btn btn-danger btn-sm remove-own-phone-row" title="${__("Remove row")}">
+						<i class="fa fa-trash"></i>
+					</button>
+				</td>
+			</tr>
+		`);
+		this.wrapper.find("#own_phones_container").append(row);
+		this.applySuspectFlagsToOwnPhoneRow(row);
+		this.updateOwnPhoneSuspectAlert();
+	}
+
 	addContactRow(data = {}) {
 		const rowId = `row_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
 		const rowName = data.name ? `data-row-name="${frappe.utils.escape_html(data.name)}"` : "";
@@ -252,6 +346,7 @@ class DeviceEntryPage {
 				<td>
 					<input type="text" class="form-control contact-phone" placeholder="${__("Phone number")}" value="${frappe.utils.escape_html(data.phone_number || "")}">
 				</td>
+				<td class="contact-suspect-cell"><span class="contact-suspect-label text-muted">—</span></td>
 				<td>
 					<button type="button" class="btn btn-danger btn-sm remove-contact-row" title="${__("Remove row")}">
 						<i class="fa fa-trash"></i>
@@ -261,6 +356,7 @@ class DeviceEntryPage {
 		`);
 
 		this.wrapper.find("#contacts_container").append(row);
+		this.applySuspectFlagsToRow(row);
 		this.updateContactStats();
 		this.refreshPagination();
 	}
@@ -269,6 +365,11 @@ class DeviceEntryPage {
 		this.wrapper.on("click", "#mode_new_entry", () => this.setMode("new"));
 		this.wrapper.on("click", "#mode_edit_entry", () => this.setMode("edit"));
 		this.wrapper.on("click", "#add_contact_row", () => this.addContactRow());
+		this.wrapper.on("click", "#add_own_phone_row", () => this.addOwnPhoneRow());
+		this.wrapper.on("click", ".remove-own-phone-row", (e) => {
+			$(e.currentTarget).closest(".own-phone-row").remove();
+			this.updateOwnPhoneSuspectAlert();
+		});
 		this.wrapper.on("click", "#start_new_entry", () => this.resetForm());
 		this.wrapper.on("click", "#download_contacts_template", () => this.downloadTemplate());
 		this.wrapper.on("click", "#upload_contacts_excel", () => this.wrapper.find("#contacts_file_input").trigger("click"));
@@ -277,6 +378,14 @@ class DeviceEntryPage {
 		this.wrapper.on("click", "#contacts_prev_page", () => this.changePage(-1));
 		this.wrapper.on("click", "#contacts_next_page", () => this.changePage(1));
 		this.wrapper.on("change", "#contacts_page_size", (e) => this.setPageSize(e.target.value));
+		this.wrapper.on("input", ".contact-phone", (e) => {
+			this.applySuspectFlagsToRow($(e.target).closest(".contact-row"));
+			this.updateContactStats();
+		});
+		this.wrapper.on("input", ".own-phone-number", (e) => {
+			this.applySuspectFlagsToOwnPhoneRow($(e.target).closest(".own-phone-row"));
+			this.updateOwnPhoneSuspectAlert();
+		});
 
 		this.wrapper.on("click", ".remove-contact-row", (e) => {
 			$(e.currentTarget).closest(".contact-row").remove();
@@ -383,8 +492,17 @@ class DeviceEntryPage {
 
 	populateForm(doc) {
 		this.wrapper.find("#owner_name").val(doc.odner_name || "");
+		this.wrapper.find("#sim_types").val(doc.sim_types || "");
+		this.wrapper.find("#own_phones_container").empty();
+		const ownPhones = doc.device_own_phone_number || [];
+		if (ownPhones.length) {
+			ownPhones.forEach((row) => this.addOwnPhoneRow(row));
+		} else {
+			this.addOwnPhoneRow();
+		}
 		this.wrapper.find("#device_id_contact").val(doc.device_id_contact || "");
 		this.ownerImageField.set_value(doc.owner_image || "");
+		this.updateImportStatsDisplay(doc);
 		this.wrapper.find("#contacts_container").empty();
 		this.setCurrentImportReference("");
 
@@ -396,6 +514,8 @@ class DeviceEntryPage {
 		}
 
 		contacts.forEach((row) => this.addContactRow(row));
+		this.applySuspectFlags();
+		this.applyOwnPhoneSuspectFlags();
 		this.updateContactStats();
 	}
 
@@ -451,6 +571,11 @@ class DeviceEntryPage {
 							})
 						);
 						this.lastImportedReference = importReference;
+						this.lastImportStats = {
+							total_contacts: parsed.length,
+							total_imported: parsed.length,
+							duplicates_found: 0,
+						};
 						this.setCurrentImportReference(importReference);
 						this.updateContactStats();
 						this.currentPage = 1;
@@ -516,6 +641,18 @@ class DeviceEntryPage {
 
 	collectData() {
 		const ownerName = (this.wrapper.find("#owner_name").val() || "").trim();
+		const ownPhones = [];
+		this.wrapper.find(".own-phone-row").each(function () {
+			const phoneNumber = ($(this).find(".own-phone-number").val() || "").trim();
+			if (!phoneNumber) {
+				return;
+			}
+			ownPhones.push({
+				sim_slot: ($(this).find(".own-phone-slot").val() || "SIM 1").trim(),
+				phone_number: phoneNumber,
+				label: ($(this).find(".own-phone-label").val() || "").trim(),
+			});
+		});
 		const deviceIdContact = (this.wrapper.find("#device_id_contact").val() || "").trim();
 		const ownerImage = this.ownerImageField.get_value();
 		const contacts = [];
@@ -537,12 +674,12 @@ class DeviceEntryPage {
 			}
 		});
 
-		return { ownerName, deviceIdContact, ownerImage, contacts };
+		return { ownerName, ownPhones, deviceIdContact, ownerImage, contacts };
 	}
 
 	validate(data) {
-		if (!data.ownerName) {
-			frappe.msgprint(__("Owner name is required."));
+		if (this.currentMode === "new" && !data.ownerName) {
+			frappe.msgprint(__("Owner name is required for new manual registration."));
 			return false;
 		}
 
@@ -575,6 +712,12 @@ class DeviceEntryPage {
 			frappe.msgprint(__("Select a Device Id in the field above. It will load automatically."));
 			return;
 		}
+		const importStats = this.lastImportStats || {
+			total_contacts: data.contacts.length,
+			total_imported: data.contacts.length,
+			duplicates_found: 0,
+		};
+
 		frappe.call({
 			method: isUpdate ? "contactlink.contactlink.api.update_device_entry" : "frappe.client.insert",
 			args: isUpdate
@@ -583,7 +726,11 @@ class DeviceEntryPage {
 						odner_name: data.ownerName,
 						device_id_contact: data.deviceIdContact,
 						owner_image: data.ownerImage,
+						device_own_phone_number: data.ownPhones,
 						device_contact: data.contacts,
+						total_contacts: importStats.total_contacts,
+						total_imported: importStats.total_imported,
+						duplicates_found: importStats.duplicates_found,
 					}
 				: {
 						doc: {
@@ -591,6 +738,11 @@ class DeviceEntryPage {
 							odner_name: data.ownerName,
 							device_id_contact: data.deviceIdContact,
 							owner_image: data.ownerImage,
+							device_own_phone_number: data.ownPhones,
+							import_type: "Manual",
+							total_contacts: importStats.total_contacts,
+							total_imported: importStats.total_imported,
+							duplicates_found: importStats.duplicates_found,
 							device_contact: data.contacts,
 						},
 					},
@@ -618,12 +770,32 @@ class DeviceEntryPage {
 		});
 	}
 
+	updateImportStatsDisplay(doc) {
+		const panel = this.wrapper.find("#import_stats_panel");
+		if (!doc || (!doc.import_type && !doc.total_contacts)) {
+			panel.hide();
+			return;
+		}
+		panel.show();
+		this.wrapper.find("#import_type_display").text(doc.import_type || "—");
+		this.wrapper.find("#device_details_display").text(doc.device_details || "—");
+		this.wrapper.find("#total_contacts_display").text(doc.total_contacts || 0);
+		this.wrapper.find("#total_imported_display").text(doc.total_imported || 0);
+		this.wrapper.find("#duplicates_found_display").text(doc.duplicates_found || 0);
+	}
+
 	resetForm() {
 		this.currentDeviceId = null;
 		this.lastImportedReference = null;
+		this.lastImportStats = null;
 		this.availableImportReferences = [];
 		this.wrapper.find("#owner_name").val("");
+		this.wrapper.find("#sim_types").val("");
+		this.wrapper.find("#own_phones_container").empty();
+		this.addOwnPhoneRow();
+		this.updateOwnPhoneSuspectAlert();
 		this.wrapper.find("#device_id_contact").val("");
+		this.wrapper.find("#import_stats_panel").hide();
 		if (this.existingDeviceField) this.existingDeviceField.set_value("");
 		this.ownerImageField.set_value("");
 		this.wrapper.find("#contacts_container").empty();
@@ -639,9 +811,83 @@ class DeviceEntryPage {
 		this.refreshPagination();
 	}
 
+	applySuspectFlagsToOwnPhoneRow($row) {
+		if (!this.suspectIndex || !window.contactlink || !contactlink.suspect) {
+			return;
+		}
+		const phone = ($row.find(".own-phone-number").val() || "").trim();
+		const matches = contactlink.suspect.matches_for_phone(phone, this.suspectIndex);
+		const $cell = $row.find(".own-phone-suspect-cell");
+		$row.removeClass("cl-suspect-row");
+		if (!matches.length) {
+			$cell.html('<span class="contact-suspect-label text-muted">—</span>');
+			return;
+		}
+		$row.addClass("cl-suspect-row");
+		const label = contactlink.suspect.format_match_label(matches);
+		$cell.html(
+			`<span class="cl-suspect-badge" title="${frappe.utils.escape_html(label)}">${__(
+				"SUSPECT"
+			)}</span> <span class="text-muted small">${frappe.utils.escape_html(label)}</span>`
+		);
+	}
+
+	applyOwnPhoneSuspectFlags() {
+		const self = this;
+		this.wrapper.find(".own-phone-row").each(function () {
+			self.applySuspectFlagsToOwnPhoneRow($(this));
+		});
+		this.updateOwnPhoneSuspectAlert();
+	}
+
+	updateOwnPhoneSuspectAlert() {
+		const $alert = this.wrapper.find("#device_owner_suspect_alert");
+		const suspectCount = this.wrapper.find(".own-phone-row.cl-suspect-row").length;
+		if (!suspectCount) {
+			$alert.hide().empty();
+			return;
+		}
+		$alert.html(
+			__("{0} device line number(s) match an active <b>Suspect Profile</b> number.", [
+				suspectCount,
+			])
+		).show();
+	}
+
+	applySuspectFlagsToRow($row) {
+		if (!this.suspectIndex || !window.contactlink || !contactlink.suspect) {
+			return;
+		}
+		const phone = ($row.find(".contact-phone").val() || "").trim();
+		const matches = contactlink.suspect.matches_for_phone(phone, this.suspectIndex);
+		const $cell = $row.find(".contact-suspect-cell");
+		$row.removeClass("cl-suspect-row");
+		if (!matches.length) {
+			$cell.html('<span class="contact-suspect-label text-muted">—</span>');
+			return;
+		}
+		$row.addClass("cl-suspect-row");
+		const label = contactlink.suspect.format_match_label(matches);
+		$cell.html(
+			`<span class="cl-suspect-badge" title="${frappe.utils.escape_html(label)}">${__(
+				"SUSPECT"
+			)}</span> <span class="text-muted small">${frappe.utils.escape_html(label)}</span>`
+		);
+	}
+
+	applySuspectFlags() {
+		const self = this;
+		this.wrapper.find(".contact-row").each(function () {
+			self.applySuspectFlagsToRow($(this));
+		});
+		this.updateContactStats();
+	}
+
 	updateContactStats() {
 		const total = this.wrapper.find(".contact-row").length;
+		const suspectCount = this.wrapper.find(".contact-row.cl-suspect-row").length;
 		this.wrapper.find("#contacts_total_count").text(total);
+		this.wrapper.find("#contacts_suspect_count").text(suspectCount);
 	}
 
 	setPageSize(value) {
@@ -679,6 +925,7 @@ class DeviceEntryPage {
 		this.wrapper.find("#contacts_page_indicator").text(`${this.currentPage} / ${totalPages}`);
 		this.wrapper.find("#contacts_prev_page").prop("disabled", this.currentPage <= 1);
 		this.wrapper.find("#contacts_next_page").prop("disabled", this.currentPage >= totalPages);
+		this.applySuspectFlags();
 	}
 
 	generateImportReference() {

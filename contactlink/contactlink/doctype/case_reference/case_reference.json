@@ -1,0 +1,161 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:CAS-{####}",
+ "creation": "2026-06-09 16:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "case_title",
+  "case_number",
+  "status",
+  "case_type",
+  "column_break_main",
+  "priority",
+  "opening_date",
+  "closing_date",
+  "assigned_officer",
+  "summary",
+  "section_break_details",
+  "case_details",
+  "section_break_linked",
+  "linked_cases"
+ ],
+ "fields": [
+  {
+   "fieldname": "case_title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Case Title",
+   "reqd": 1
+  },
+  {
+   "fieldname": "case_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Case Number",
+   "unique": 1
+  },
+  {
+   "default": "Open",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Open\nUnder Investigation\nPending Prosecution\nClosed\nArchived",
+   "reqd": 1
+  },
+  {
+   "fieldname": "case_type",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Case Type",
+   "options": "\nCriminal\nFraud\nCybercrime\nMissing Person\nNarcotics\nFinancial Crime\nOther"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Medium",
+   "fieldname": "priority",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Priority",
+   "options": "Low\nMedium\nHigh\nCritical"
+  },
+  {
+   "default": "Today",
+   "fieldname": "opening_date",
+   "fieldtype": "Date",
+   "label": "Opening Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "closing_date",
+   "fieldtype": "Date",
+   "label": "Closing Date"
+  },
+  {
+   "fieldname": "assigned_officer",
+   "fieldtype": "Link",
+   "label": "Assigned Officer",
+   "options": "User"
+  },
+  {
+   "fieldname": "summary",
+   "fieldtype": "Small Text",
+   "label": "Summary"
+  },
+  {
+   "fieldname": "section_break_details",
+   "fieldtype": "Section Break",
+   "label": "Case Details"
+  },
+  {
+   "fieldname": "case_details",
+   "fieldtype": "Text Editor",
+   "label": "Case Details"
+  },
+  {
+   "fieldname": "section_break_linked",
+   "fieldtype": "Section Break",
+   "label": "Linked Cases"
+  },
+  {
+   "fieldname": "linked_cases",
+   "fieldtype": "Table",
+   "label": "Linked Cases",
+   "options": "Case Link"
+  }
+ ],
+ "links": [
+  {
+   "group": "Investigation",
+   "link_doctype": "Suspect Profile",
+   "link_fieldname": "case_reference"
+  }
+ ],
+ "modified": "2026-06-09 16:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Contactlink",
+ "name": "Case Reference",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "main_admin",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "case_title,case_number",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "case_title",
+ "track_changes": 1
+}
